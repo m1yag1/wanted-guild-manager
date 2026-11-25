@@ -1,0 +1,21 @@
+[project]
+name = "wanted-guild-manager"
+# Not used for releases: the git tag is the version (see ADR 0008).
+version = "0.0.0"
+description = "Create and track sign ups for Wanted Guild PvX events in Throne and Liberty."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "dark-madr",
+]
+
+[tool.uv]
+package = false
+
+[tool.adr]
+dir = "docs/decisions"
+template = "madr"
+default_status = "proposed"
