@@ -1,0 +1,5 @@
+coverage/
+dist/
+docs/decisions/
+uv.lock
+package-lock.json
