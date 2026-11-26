@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Lint, types and tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.4.0 # no moving major tag upstream
+        with:
+          python-version: "3.13"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      # Same hooks as a local commit: file checks, ruff, mypy.
+      - name: Pre-commit checks
+        run: uv run pre-commit run --all-files --show-diff-on-failure
+
+      # Same as the local pre-push hook: tests with the 100% coverage gate.
+      - name: Tests
+        run: uv run pytest
