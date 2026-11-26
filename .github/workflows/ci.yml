@@ -27,9 +27,12 @@ jobs:
       - name: Install dependencies
         run: uv sync --locked
 
-      # Same hooks as a local commit: file checks, ruff, mypy.
+      # Same hooks as a local commit: file checks, ruff, mypy. no-commit-to-branch
+      # only guards local commits; on a push to main it would always fail.
       - name: Pre-commit checks
         run: uv run pre-commit run --all-files --show-diff-on-failure
+        env:
+          SKIP: no-commit-to-branch
 
       # Same as the local pre-push hook: tests with the 100% coverage gate.
       - name: Tests
