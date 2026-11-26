@@ -72,6 +72,13 @@ Routes so far:
 - `POST /discord/interactions` receives Discord interactions. It rejects any
   request without a valid Discord signature and answers Discord's PING.
 
+## Tasks
+
+```bash
+uv run inv --list                              # all tasks
+uv run inv github.apply-settings --dry-run     # repository settings, see .github/settings
+```
+
 ## Layout
 
 ```text
@@ -79,6 +86,7 @@ src/wgm/
   server/          create_app() and plugins
   domain/<area>/   controllers, schemas and services for one area
   lib/             shared code, such as settings
+tasks/             invoke tasks
 tests/unit/        mirrors src/wgm
 tests/fixtures/    shared pytest fixtures (plugins), with payloads in fixtures/data/
 ```
