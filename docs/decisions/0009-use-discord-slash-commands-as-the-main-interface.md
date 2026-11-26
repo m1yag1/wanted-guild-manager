@@ -11,8 +11,9 @@ The guild manager tried the idea of the web prototype (ADR 0002) and prefers run
 
 Proposed: Discord slash commands become the main interface for creating events and signing up.
 
-* Managers run `/event create` (title, type, start time, capacity) and `/event cancel`.
-* Everyone can use `/event list`, `/signup`, `/withdraw` and `/roster`.
+* Every command sits under one top-level `/wgm` command: `/wgm help`, `/wgm event list|create|edit|cancel`, `/wgm signup`, `/wgm withdraw` and `/wgm roster`.
+* Everyone can list events, sign up, withdraw, see rosters and get help. Creating, editing and cancelling events need a manager role.
+* Discord's command permissions only apply to the whole `/wgm` command, so the bot checks the member's roles for each subcommand. Role names come from config, and `/wgm help` shows only the commands the member can use.
 * Each event is posted in the channel with the start time in every reader's time zone (Discord timestamps), counts per role, and Tank, Healer, DPS and Withdraw buttons. The post updates on every change.
 * The event and sign-up rules from the web prototype move to a Python module with the same behaviour and tests.
 * The web prototype stays in the repository, parked. If accepted, this ADR supersedes ADR 0002.
