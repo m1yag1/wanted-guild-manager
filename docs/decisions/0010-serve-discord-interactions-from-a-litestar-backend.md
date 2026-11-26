@@ -14,6 +14,8 @@ Proposed: a Litestar backend receives Discord interactions over HTTPS.
 * Discord sends every slash command, button press and autocomplete request to `POST /discord/interactions`. The server checks the Ed25519 signature with the application's public key and rejects anything unsigned.
 * Litestar with type hints, served by Granian as a systemd service on the droplet, behind nginx with certbot (ADR 0006).
 * Route handlers stay thin and call plain, typed functions for the rules. Tests use pytest and Litestar's test client at 100% (ADR 0003), with a generated test key for signatures.
+* Unit tests run fully offline: incoming interactions are realistic payloads signed with a test key; outgoing Discord calls use `httpx` and are mocked with `respx` using recorded responses in `tests/fixtures/discord/`. Manual tries happen on the staging droplet.
+* Structured JSON logs (Litestar's structlog plugin) go to journald. `inv logs` and `inv status` show logs, service state, version and certificate expiry without logging in by hand. Tokens and message contents are never logged.
 * Commands answer within Discord's 3-second limit. Anything slower is deferred and finished with a follow-up message.
 * `inv discord.register-commands` sends the `/wgm` definitions to Discord. `inv droplet.up` sets the application's interactions endpoint URL through Discord's API after each deploy, because a new droplet gets a new sslip.io hostname.
 * Reminders run as a background task in the server, posting through Discord's REST API.
