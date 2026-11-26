@@ -1,17 +1,23 @@
-"""The Litestar application.
+"""Application factory.
 
-Run it with Granian:
+Run the server with Granian through the Litestar CLI:
 
-    uv run granian --interface asgi wgm.app:app
+    uv run litestar --app wgm.app:create_app run
 """
 
-from litestar import Litestar, get
+from litestar import Litestar
+from litestar_granian import GranianPlugin
+
+from wgm.health import HealthController
 
 
-@get("/ping")
-async def ping() -> dict[str, str]:
-    """Answer a health check."""
-    return {"message": "pong!"}
+def create_app() -> Litestar:
+    """Build the Litestar application.
 
-
-app = Litestar(route_handlers=[ping])
+    Returns:
+        The configured application.
+    """
+    return Litestar(
+        route_handlers=[HealthController],
+        plugins=[GranianPlugin()],
+    )

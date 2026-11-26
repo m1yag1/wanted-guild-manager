@@ -20,10 +20,11 @@ npm ci
 
 ## The backend
 
-A Litestar app served by Granian (ADR 0010).
+A Litestar app served by Granian (ADR 0010). It follows the Litestar agent
+skills in `.claude/skills/`: the app is always built by `create_app()`.
 
 ```bash
-uv run granian --interface asgi wgm.app:app   # http://127.0.0.1:8000/ping
+uv run litestar --app wgm.app:create_app run   # http://127.0.0.1:8000/ping
 uv run pytest                                  # tests with the 100% coverage gate
 uv run ruff check && uv run ruff format --check && uv run mypy
 ```
