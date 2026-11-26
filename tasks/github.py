@@ -2,7 +2,6 @@
 
 import json
 import re
-import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
 from http import HTTPStatus
@@ -11,6 +10,8 @@ from typing import Any, Protocol
 
 from invoke.context import Context
 from invoke.tasks import task
+
+from tasks.shell import CommandError, Shell
 
 SETTINGS_DIR = Path(__file__).parents[1] / ".github" / "settings"
 
@@ -42,6 +43,7 @@ class Gh(Protocol):
 class GhCli:
     """Calls the GitHub API through the `gh` command line tool."""
 
+    shell: Shell
     executable: str = "gh"
 
     def api(self, method: str, path: str, body: dict[str, Any] | None = None) -> Any:
@@ -53,18 +55,15 @@ class GhCli:
         args = [self.executable, "api", "--method", method, path]
         if body is not None:
             args += ["--input", "-"]
-        result = subprocess.run(
-            args,
-            input=None if body is None else json.dumps(body),
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if result.returncode != 0:
-            match = re.search(r"\(HTTP (\d+)\)", result.stderr)
+        try:
+            output = self.shell.run(
+                args, stdin=None if body is None else json.dumps(body)
+            )
+        except CommandError as error:
+            match = re.search(r"\(HTTP (\d+)\)", error.stderr)
             status = int(match.group(1)) if match else None
-            raise GhError(status, result.stderr.strip())
-        return json.loads(result.stdout) if result.stdout.strip() else None
+            raise GhError(status, error.stderr.strip()) from None
+        return json.loads(output) if output.strip() else None
 
 
 @dataclass(frozen=True, slots=True)
@@ -187,7 +186,7 @@ def merge_when_ready(gh: Gh, number: int, checks: list[str], echo: Echo) -> bool
 @task(help={"pr": "Pull request number.", "gh": "Path to the gh executable."})
 def merge_if_ready(c: Context, pr: str, gh: str = "gh") -> None:
     """Merge a pull request labelled automerge once its CI check passed."""
-    merge_when_ready(GhCli(gh), int(pr), required_checks(SETTINGS_DIR), print)
+    merge_when_ready(GhCli(Shell(c), gh), int(pr), required_checks(SETTINGS_DIR), print)
 
 
 @task(
@@ -202,4 +201,4 @@ def apply_settings(c: Context, dry_run: bool = False, gh: str = "gh") -> None:
         # Print only the calls; results like "Created" would not be true yet.
         apply(DryRunGh(print), SETTINGS_DIR, lambda _: None)
     else:
-        apply(GhCli(gh), SETTINGS_DIR, print)
+        apply(GhCli(Shell(c), gh), SETTINGS_DIR, print)

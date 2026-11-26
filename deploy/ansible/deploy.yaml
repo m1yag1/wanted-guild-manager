@@ -1,0 +1,98 @@
+---
+# Installs a built wheel as a new release of one environment, points `current`
+# at it, restarts the service and checks /ping. Run by `inv deploy`.
+- name: Deploy a release
+  hosts: all
+  gather_facts: false
+  vars:
+    app_root: /opt/wgm
+    env_root: "{{ app_root }}/{{ env }}"
+    release_dir: "{{ env_root }}/releases/{{ version }}"
+
+  tasks:
+    - name: Create the release directory
+      ansible.builtin.file:
+        path: "{{ release_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Copy the wheel and pinned requirements
+      ansible.builtin.copy:
+        src: "{{ item }}"
+        dest: "{{ release_dir }}/"
+        mode: "0644"
+      loop:
+        - "{{ wheel }}"
+        - "{{ requirements }}"
+
+    - name: Record the version
+      ansible.builtin.copy:
+        dest: "{{ release_dir }}/VERSION"
+        content: "{{ version }}\n"
+        mode: "0644"
+
+    - name: Create the virtual environment
+      ansible.builtin.command:
+        cmd: /usr/local/bin/uv venv --python {{ python_version }} {{ release_dir }}/.venv
+        creates: "{{ release_dir }}/.venv/bin/python"
+      environment:
+        UV_PYTHON_INSTALL_DIR: "{{ app_root }}/python"
+        UV_PYTHON_PREFERENCE: only-managed
+
+    - name: Install dependencies and the app
+      ansible.builtin.command:
+        cmd: >-
+          /usr/local/bin/uv pip install --python {{ release_dir }}/.venv/bin/python
+          --require-hashes -r {{ release_dir }}/requirements.txt
+      changed_when: true
+
+    - name: Install the app wheel
+      ansible.builtin.command:
+        cmd: >-
+          /usr/local/bin/uv pip install --python {{ release_dir }}/.venv/bin/python
+          --no-deps {{ release_dir }}/{{ wheel | basename }}
+      changed_when: true
+
+    - name: Install the environment's secrets
+      become: true
+      ansible.builtin.copy:
+        src: "{{ env_file }}"
+        dest: "/etc/wgm/{{ env }}.env"
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Point current at the new release
+      ansible.builtin.file:
+        src: "{{ release_dir }}"
+        dest: "{{ env_root }}/current"
+        state: link
+
+    - name: Restart the service
+      become: true
+      ansible.builtin.systemd_service:
+        name: "wgm-{{ env }}"
+        state: restarted
+        enabled: true
+
+    - name: Wait for /ping
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ app_port }}/ping"
+      register: ping
+      retries: 10
+      delay: 2
+      until: ping.status == 200
+
+    - name: Find old releases
+      ansible.builtin.find:
+        paths: "{{ env_root }}/releases"
+        file_type: directory
+      register: releases
+
+    - name: Keep only the newest releases
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ (releases.files | sort(attribute='mtime', reverse=true))[keep_releases | int :] }}"
+      loop_control:
+        label: "{{ item.path | basename }}"

@@ -17,6 +17,7 @@ from tasks.github import (
     apply_ruleset,
     apply_settings,
 )
+from tasks.shell import Shell
 from tests.fixtures.gh import MakeFakeGh
 
 PAID_PLAN_ONLY = {
@@ -45,7 +46,7 @@ def test_applies_repo_settings_and_skips_the_paid_ruleset(
     gh = fake_gh({RULESETS: PAID_PLAN_ONLY})
     messages: list[str] = []
 
-    apply(GhCli(str(gh.path)), SETTINGS_DIR, messages.append)
+    apply(GhCli(Shell(Context()), str(gh.path)), SETTINGS_DIR, messages.append)
 
     calls = gh.calls()
     assert [call["args"][2:4] for call in calls] == [
@@ -66,7 +67,7 @@ def test_creates_the_ruleset_when_missing(fake_gh: MakeFakeGh) -> None:
     gh = fake_gh({RULESETS: {"stdout": "[]"}})
     messages: list[str] = []
 
-    apply_ruleset(GhCli(str(gh.path)), _ruleset(), messages.append)
+    apply_ruleset(GhCli(Shell(Context()), str(gh.path)), _ruleset(), messages.append)
 
     last = gh.calls()[-1]
     assert last["args"][2:4] == ["POST", f"{REPO}/rulesets"]
@@ -79,7 +80,7 @@ def test_updates_the_ruleset_when_present(fake_gh: MakeFakeGh) -> None:
     gh = fake_gh({RULESETS: {"stdout": json.dumps(existing)}})
     messages: list[str] = []
 
-    apply_ruleset(GhCli(str(gh.path)), _ruleset(), messages.append)
+    apply_ruleset(GhCli(Shell(Context()), str(gh.path)), _ruleset(), messages.append)
 
     assert gh.calls()[-1]["args"][2:4] == ["PUT", f"{REPO}/rulesets/42"]
     assert messages == ["Updated the protect-main ruleset."]
@@ -89,7 +90,7 @@ def test_other_errors_are_raised(fake_gh: MakeFakeGh) -> None:
     gh = fake_gh({RULESETS: {"code": 1, "stderr": "gh: Not Found (HTTP 404)"}})
 
     with pytest.raises(GhError) as raised:
-        apply_ruleset(GhCli(str(gh.path)), _ruleset(), print)
+        apply_ruleset(GhCli(Shell(Context()), str(gh.path)), _ruleset(), print)
 
     assert raised.value.status == HTTPStatus.NOT_FOUND
 
@@ -98,7 +99,7 @@ def test_errors_without_a_status_are_raised(fake_gh: MakeFakeGh) -> None:
     gh = fake_gh({RULESETS: {"code": 1, "stderr": "gh: not logged in"}})
 
     with pytest.raises(GhError) as raised:
-        apply_ruleset(GhCli(str(gh.path)), _ruleset(), print)
+        apply_ruleset(GhCli(Shell(Context()), str(gh.path)), _ruleset(), print)
 
     assert raised.value.status is None
 
@@ -150,7 +151,7 @@ def test_leaves_security_settings_alone_when_not_requested(
     (settings_dir / "main-ruleset.json").write_text(json.dumps(_ruleset()))
     gh = fake_gh({RULESETS: PAID_PLAN_ONLY})
 
-    apply(GhCli(str(gh.path)), settings_dir, print)
+    apply(GhCli(Shell(Context()), str(gh.path)), settings_dir, print)
 
     assert [call["args"][2] for call in gh.calls()] == ["PATCH", "GET"]
 
@@ -162,7 +163,7 @@ def test_updates_an_existing_label(fake_gh: MakeFakeGh) -> None:
     gh = fake_gh({})
     messages: list[str] = []
 
-    apply_label(GhCli(str(gh.path)), LABEL, messages.append)
+    apply_label(GhCli(Shell(Context()), str(gh.path)), LABEL, messages.append)
 
     assert [c["args"][2:4] for c in gh.calls()] == [
         ["PATCH", f"{REPO}/labels/automerge"]
@@ -181,7 +182,7 @@ def test_creates_a_missing_label(fake_gh: MakeFakeGh) -> None:
     )
     messages: list[str] = []
 
-    apply_label(GhCli(str(gh.path)), LABEL, messages.append)
+    apply_label(GhCli(Shell(Context()), str(gh.path)), LABEL, messages.append)
 
     last = gh.calls()[-1]
     assert last["args"][2:4] == ["POST", f"{REPO}/labels"]
@@ -195,4 +196,4 @@ def test_other_label_errors_are_raised(fake_gh: MakeFakeGh) -> None:
     )
 
     with pytest.raises(GhError):
-        apply_label(GhCli(str(gh.path)), LABEL, print)
+        apply_label(GhCli(Shell(Context()), str(gh.path)), LABEL, print)

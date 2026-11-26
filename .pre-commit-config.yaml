@@ -40,6 +40,12 @@ repos:
         language: system
         types: [python]
         pass_filenames: false
+      - id: ansible-lint
+        name: ansible-lint
+        entry: uv run ansible-lint
+        language: system
+        files: ^deploy/ansible/
+        pass_filenames: false
       - id: pytest
         name: pytest (100% coverage)
         entry: uv run pytest -q

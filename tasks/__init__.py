@@ -2,6 +2,8 @@
 
 from invoke.collection import Collection
 
-from tasks import github
+from tasks import deploy, droplet, github, observe
 
-ns = Collection(github)
+ns = Collection(github, droplet, deploy)
+ns.add_task(observe.logs_task)
+ns.add_task(observe.status_task)

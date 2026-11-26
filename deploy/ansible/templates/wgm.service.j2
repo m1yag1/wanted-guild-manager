@@ -1,0 +1,24 @@
+# Managed by Ansible (deploy/ansible). Runs the {{ item.name }} environment.
+[Unit]
+Description=Wanted Guild Manager ({{ item.name }})
+After=network.target
+
+[Service]
+Type=exec
+User=wgm
+Group=wgm
+WorkingDirectory=/opt/wgm/{{ item.name }}/current
+EnvironmentFile=/etc/wgm/{{ item.name }}.env
+Environment=LITESTAR_APP=wgm.server.app:create_app
+ExecStart=/opt/wgm/{{ item.name }}/current/.venv/bin/litestar run --host 127.0.0.1 --port {{ item.port }}
+KillSignal=SIGINT
+TimeoutStopSec=30
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

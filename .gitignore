@@ -13,10 +13,12 @@ __pycache__/
 htmlcov/
 
 # Generated per droplet, holds its IP
-ansible/inventories/*.yaml
+deploy/ansible/inventories/*.json
 
 # Local
 .env
+.env.*
+!.env.example
 .DS_Store
 
 # Project Claude skills are tracked even though the global gitignore skips .claude
