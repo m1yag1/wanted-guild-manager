@@ -1,7 +1,4 @@
-import pytest
-
-
-@pytest.fixture
-def anyio_backend() -> str:
-    """Run async tests on asyncio only."""
-    return "asyncio"
+pytest_plugins = [
+    "tests.fixtures.app",
+    "tests.fixtures.discord",
+]

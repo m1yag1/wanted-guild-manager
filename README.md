@@ -16,6 +16,7 @@ The plan and its reasons are in [docs/decisions](docs/decisions).
 ```bash
 uv sync
 uv run pre-commit install --hook-type pre-commit --hook-type commit-msg --hook-type pre-push
+cp .env.example .env   # then fill in the values
 ```
 
 ## The backend
@@ -29,13 +30,21 @@ uv run pytest                                         # tests with the 100% cove
 uv run pre-commit run --all-files                     # ruff, mypy and file checks
 ```
 
+Routes so far:
+
+- `GET /ping` answers `{"message": "pong!"}`.
+- `POST /discord/interactions` receives Discord interactions. It rejects any
+  request without a valid Discord signature and answers Discord's PING.
+
 ## Layout
 
 ```text
 src/wgm/
   server/          create_app() and plugins
   domain/<area>/   controllers, schemas and services for one area
+  lib/             shared code, such as settings
 tests/unit/        mirrors src/wgm
+tests/fixtures/    shared pytest fixtures (plugins), with payloads in fixtures/data/
 ```
 
 ## Commits and releases

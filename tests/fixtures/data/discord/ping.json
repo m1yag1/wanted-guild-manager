@@ -1,0 +1,14 @@
+{
+  "id": "1311000000000000001",
+  "application_id": "1310000000000000000",
+  "type": 1,
+  "token": "fake-interaction-token",
+  "version": 1,
+  "user": {
+    "id": "53908232506183680",
+    "username": "mason",
+    "discriminator": "0",
+    "avatar": null,
+    "global_name": "Mason"
+  }
+}
