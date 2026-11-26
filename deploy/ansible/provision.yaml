@@ -1,0 +1,263 @@
+---
+# Prepares the droplet: packages, users, SSH hardening, firewall, uv and Python,
+# and per environment a systemd service, an nginx site and a certificate.
+# Run by `inv droplet.up` (first time as root) and `inv droplet.provision`.
+- name: Provision the droplet
+  hosts: all
+  become: true
+  gather_facts: false
+  # Run notified handlers even if a later task fails, so a re-run never leaves
+  # a changed config (such as sshd) without its restart.
+  force_handlers: true
+  vars:
+    app_user: wgm
+    app_root: /opt/wgm
+    webroot: /var/www/certbot
+
+  handlers:
+    - name: Reload systemd
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+
+    - name: Reload nginx
+      ansible.builtin.systemd_service:
+        name: nginx
+        state: reloaded
+
+    - name: Restart ssh
+      ansible.builtin.systemd_service:
+        name: ssh
+        state: restarted
+
+    - name: Restart journald
+      ansible.builtin.systemd_service:
+        name: systemd-journald
+        state: restarted
+
+  tasks:
+    - name: Wait for SSH on a new droplet
+      ansible.builtin.wait_for_connection:
+        timeout: 300
+
+    - name: Gather facts
+      ansible.builtin.setup:
+
+    - name: Install packages
+      ansible.builtin.apt:
+        name:
+          - nginx
+          - certbot
+          - ufw
+          - unattended-upgrades
+          - curl
+        # Always refresh: a new droplet's package index can be stale and 404.
+        update_cache: true
+
+    - name: Create the deploy user
+      ansible.builtin.user:
+        name: "{{ deploy_user }}"
+        shell: /bin/bash
+        groups: [adm, systemd-journal]
+        append: true
+
+    - name: Authorize the project SSH key for the deploy user
+      ansible.posix.authorized_key:
+        user: "{{ deploy_user }}"
+        key: "{{ ssh_public_key }}"
+        exclusive: true
+
+    - name: Let the deploy user manage the app services
+      ansible.builtin.copy:
+        dest: "/etc/sudoers.d/{{ deploy_user }}"
+        mode: "0440"
+        content: |
+          {{ deploy_user }} ALL=(ALL) NOPASSWD: ALL
+        validate: visudo -cf %s
+
+    - name: Create the app user
+      ansible.builtin.user:
+        name: "{{ app_user }}"
+        system: true
+        shell: /usr/sbin/nologin
+        home: "{{ app_root }}"
+        create_home: false
+
+    - name: Create app directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ deploy_user }}"
+        group: "{{ app_user }}"
+        mode: "0755"
+      loop:
+        - "{{ app_root }}"
+        - "{{ app_root }}/python"
+
+    - name: Create per-environment directories
+      ansible.builtin.file:
+        path: "{{ app_root }}/{{ item.name }}/releases"
+        state: directory
+        owner: "{{ deploy_user }}"
+        group: "{{ app_user }}"
+        mode: "0755"
+      loop: "{{ environments }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Create the secrets directory
+      ansible.builtin.file:
+        path: /etc/wgm
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Check the installed uv version
+      ansible.builtin.command: /usr/local/bin/uv --version
+      register: uv_installed
+      changed_when: false
+      failed_when: false
+
+    - name: Install uv
+      when: uv_version not in (uv_installed.stdout | default(''))
+      ansible.builtin.shell:
+        cmd: >-
+          set -o pipefail &&
+          curl -LsSf https://astral.sh/uv/{{ uv_version }}/install.sh
+          | env UV_INSTALL_DIR=/usr/local/bin UV_NO_MODIFY_PATH=1 sh
+        executable: /bin/bash
+      changed_when: true
+
+    - name: Install Python for the app
+      become: true
+      become_user: "{{ deploy_user }}"
+      ansible.builtin.command:
+        cmd: /usr/local/bin/uv python install {{ python_version }}
+      environment:
+        UV_PYTHON_INSTALL_DIR: "{{ app_root }}/python"
+      register: python_install
+      changed_when: "'Installed' in python_install.stderr"
+
+    - name: Create the journald drop-in directory
+      ansible.builtin.file:
+        path: /etc/systemd/journald.conf.d
+        state: directory
+        mode: "0755"
+
+    - name: Cap journald disk use
+      ansible.builtin.copy:
+        dest: /etc/systemd/journald.conf.d/wgm.conf
+        mode: "0644"
+        content: |
+          [Journal]
+          SystemMaxUse=200M
+      notify: Restart journald
+
+    - name: Install a systemd service per environment
+      ansible.builtin.template:
+        src: wgm.service.j2
+        dest: "/etc/systemd/system/wgm-{{ item.name }}.service"
+        mode: "0644"
+      loop: "{{ environments }}"
+      loop_control:
+        label: "{{ item.name }}"
+      notify: Reload systemd
+
+    - name: Create the ACME challenge directory
+      ansible.builtin.file:
+        path: "{{ webroot }}"
+        state: directory
+        mode: "0755"
+
+    - name: Remove the default nginx site
+      ansible.builtin.file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+      notify: Reload nginx
+
+    - name: Refuse requests for hostnames we do not serve
+      ansible.builtin.copy:
+        dest: /etc/nginx/sites-enabled/00-default.conf
+        mode: "0644"
+        content: |
+          # Managed by Ansible. Drops requests for unknown hostnames, such as
+          # scanners hitting the bare IP, instead of passing them to the app.
+          server {
+              listen 80 default_server;
+              listen [::]:80 default_server;
+              listen 443 ssl default_server;
+              listen [::]:443 ssl default_server;
+              ssl_reject_handshake on;
+              return 444;
+          }
+      notify: Reload nginx
+
+    - name: Check for existing certificates
+      ansible.builtin.stat:
+        path: "/etc/letsencrypt/live/{{ item.hostname }}/fullchain.pem"
+      loop: "{{ environments }}"
+      loop_control:
+        label: "{{ item.hostname }}"
+      register: certs
+
+    - name: Install nginx sites (HTTP only until a certificate exists)
+      ansible.builtin.template:
+        src: nginx-site.conf.j2
+        dest: "/etc/nginx/sites-enabled/wgm-{{ item.item.name }}.conf"
+        mode: "0644"
+      vars:
+        env: "{{ item.item }}"
+        has_cert: "{{ item.stat.exists }}"
+      loop: "{{ certs.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+      notify: Reload nginx
+
+    - name: Apply systemd and nginx changes before requesting certificates
+      ansible.builtin.meta: flush_handlers
+
+    - name: Allow SSH and HTTPS through the firewall
+      community.general.ufw:
+        rule: allow
+        name: "{{ item }}"
+      loop: [OpenSSH, Nginx Full]
+
+    - name: Turn on the firewall
+      community.general.ufw:
+        state: enabled
+        policy: deny
+
+    - name: Request certificates
+      ansible.builtin.command:
+        cmd: >-
+          certbot certonly --webroot -w {{ webroot }} -d {{ item.item.hostname }}
+          --non-interactive --agree-tos --register-unsafely-without-email
+          --deploy-hook "systemctl reload nginx"
+        creates: "/etc/letsencrypt/live/{{ item.item.hostname }}/fullchain.pem"
+      when: not item.stat.exists
+      loop: "{{ certs.results }}"
+      loop_control:
+        label: "{{ item.item.hostname }}"
+
+    - name: Install nginx sites with HTTPS
+      ansible.builtin.template:
+        src: nginx-site.conf.j2
+        dest: "/etc/nginx/sites-enabled/wgm-{{ item.name }}.conf"
+        mode: "0644"
+      vars:
+        env: "{{ item }}"
+        has_cert: true
+      loop: "{{ environments }}"
+      loop_control:
+        label: "{{ item.name }}"
+      notify: Reload nginx
+
+    - name: Turn off root and password SSH logins
+      ansible.builtin.copy:
+        dest: /etc/ssh/sshd_config.d/10-wgm.conf
+        mode: "0644"
+        content: |
+          PermitRootLogin no
+          PasswordAuthentication no
+          KbdInteractiveAuthentication no
+      notify: Restart ssh

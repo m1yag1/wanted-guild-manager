@@ -1,0 +1,7 @@
+# ansible-lint settings: https://docs.ansible.com/projects/lint/configuring/
+profile: production
+exclude_paths:
+  - .claude/
+  - .venv/
+  - .github/
+  - tests/

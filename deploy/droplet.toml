@@ -1,0 +1,25 @@
+# Settings for the DigitalOcean droplet that runs staging (and later production).
+# Read by `inv droplet.*`, `inv deploy`, `inv logs` and `inv status`.
+
+[droplet]
+name = "wgm"
+tag = "wgm"                      # teardown only deletes droplets with this tag and name
+region = "sfo3"
+size = "s-1vcpu-1gb"
+image = "ubuntu-24-04-x64"
+ssh_key_name = "wgm-do"          # the key's name in DigitalOcean
+ssh_key_path = "~/.ssh/wgm_do"   # the matching private key on this machine
+known_hosts = "~/.ssh/wgm_known_hosts"
+user = "deploy"                  # login user after provisioning (root login is turned off)
+uv_version = "0.13.10"
+python_version = "3.13"
+
+# One entry per environment. Each gets its own hostname, port, service and data.
+[environments.staging]
+subdomain = "staging"
+port = 8001
+
+# Production shares the droplet later (ADR 0007). Uncomment to add it.
+# [environments.production]
+# subdomain = ""
+# port = 8002

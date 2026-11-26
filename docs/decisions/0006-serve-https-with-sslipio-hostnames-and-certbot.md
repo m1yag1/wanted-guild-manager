@@ -11,7 +11,7 @@ The site must always be served over HTTPS, with certificates managed on the serv
 
 Until there is a domain, each droplet is reached through an `sslip.io` hostname built from its IP, for example `143-198-10-20.sslip.io` for production and `staging.143-198-10-20.sslip.io` for staging. These resolve to the IP with no DNS setup.
 
-The provisioning playbook installs certbot with its nginx plugin, gets a Let's Encrypt certificate for the hostname and turns on certbot's renewal timer. nginx redirects every HTTP request to HTTPS and sends an HSTS header.
+The provisioning playbook installs certbot, gets a Let's Encrypt certificate for each hostname with the webroot method (so certbot never edits the nginx config Ansible manages), and relies on certbot's renewal timer, which reloads nginx after each renewal. nginx redirects every HTTP request to HTTPS and sends an HSTS header.
 
 The hostname is one inventory variable, `domain_name`, so a real domain replaces it without other changes.
 

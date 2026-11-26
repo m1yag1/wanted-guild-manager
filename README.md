@@ -79,6 +79,21 @@ uv run inv --list                              # all tasks
 uv run inv github.apply-settings --dry-run     # repository settings, see .github/settings
 ```
 
+## Staging droplet
+
+Settings are in `deploy/droplet.toml`; the playbooks are in `deploy/ansible/`.
+You need `doctl` logged in and the `wgm-do` SSH key (`~/.ssh/wgm_do`).
+
+```bash
+cp .env.example .env.staging          # fill in the staging Discord values
+uv run inv droplet.up                 # create (if needed) and provision; prints the link
+uv run inv deploy                     # build and deploy to staging
+uv run inv status                     # service, version, /ping and certificate
+uv run inv logs --since 30m           # app logs (--service nginx for nginx)
+uv run inv deploy.rollback            # back to the previous release
+uv run inv droplet.down               # delete the droplet (asks for its name)
+```
+
 ## Layout
 
 ```text
@@ -87,6 +102,7 @@ src/wgm/
   domain/<area>/   controllers, schemas and services for one area
   lib/             shared code, such as settings
 tasks/             invoke tasks
+deploy/            droplet settings and Ansible playbooks
 tests/unit/        mirrors src/wgm
 tests/fixtures/    shared pytest fixtures (plugins), with payloads in fixtures/data/
 ```

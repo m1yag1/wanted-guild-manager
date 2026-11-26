@@ -1,0 +1,59 @@
+---
+# Points `current` back at the release before it and restarts the service.
+# Run by `inv deploy.rollback`.
+- name: Roll back to the previous release
+  hosts: all
+  gather_facts: false
+  vars:
+    env_root: "/opt/wgm/{{ env }}"
+
+  tasks:
+    - name: Read the current release
+      ansible.builtin.stat:
+        path: "{{ env_root }}/current"
+      register: current
+
+    - name: Find releases
+      ansible.builtin.find:
+        paths: "{{ env_root }}/releases"
+        file_type: directory
+      register: releases
+
+    - name: List releases, newest first
+      ansible.builtin.set_fact:
+        release_paths: "{{ releases.files | sort(attribute='mtime', reverse=true) | map(attribute='path') | list }}"
+
+    # The release just older than the current one, so rolling back twice keeps
+    # going back instead of flipping between two releases.
+    - name: Choose the release before the current one
+      ansible.builtin.set_fact:
+        previous: >-
+          {{ release_paths[release_paths.index(current.stat.lnk_source) + 1]
+             if current.stat.lnk_source in release_paths
+             and release_paths.index(current.stat.lnk_source) + 1 < release_paths | length
+             else '' }}
+
+    - name: Stop when there is nothing to roll back to
+      ansible.builtin.fail:
+        msg: "No earlier release of {{ env }} to roll back to."
+      when: previous == ''
+
+    - name: Point current at the previous release
+      ansible.builtin.file:
+        src: "{{ previous }}"
+        dest: "{{ env_root }}/current"
+        state: link
+
+    - name: Restart the service
+      become: true
+      ansible.builtin.systemd_service:
+        name: "wgm-{{ env }}"
+        state: restarted
+
+    - name: Wait for /ping
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ app_port }}/ping"
+      register: ping
+      retries: 10
+      delay: 2
+      until: ping.status == 200

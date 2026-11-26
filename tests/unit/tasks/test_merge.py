@@ -12,6 +12,7 @@ from tasks.github import (
     merge_when_ready,
     required_checks,
 )
+from tasks.shell import Shell
 from tests.fixtures.gh import FakeGh, MakeFakeGh
 
 CHECK = "Lint, types and tests"
@@ -43,7 +44,9 @@ def _gh(fake_gh: MakeFakeGh, pull: str, runs: str = _runs()) -> FakeGh:
 
 def _merge(gh: FakeGh) -> tuple[bool, list[str]]:
     messages: list[str] = []
-    merged = merge_when_ready(GhCli(str(gh.path)), 7, [CHECK], messages.append)
+    merged = merge_when_ready(
+        GhCli(Shell(Context()), str(gh.path)), 7, [CHECK], messages.append
+    )
     return merged, messages
 
 
