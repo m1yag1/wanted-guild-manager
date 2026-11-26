@@ -18,7 +18,17 @@ uv sync
 npm ci
 ```
 
-## The site
+## The backend
+
+A Litestar app served by Granian (ADR 0010).
+
+```bash
+uv run granian --interface asgi wgm.app:app   # http://127.0.0.1:8000/ping
+uv run pytest                                  # tests with the 100% coverage gate
+uv run ruff check && uv run ruff format --check && uv run mypy
+```
+
+## The site (parked)
 
 ```bash
 npm run dev     # local dev server
