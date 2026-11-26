@@ -1,0 +1,45 @@
+name: Auto-merge
+
+# Rebase-merges a pull request labelled "automerge" once CI has passed.
+# Runs when the label is added and whenever CI finishes for a pull request.
+on:
+  pull_request:
+    types: [labeled]
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: read
+
+jobs:
+  merge:
+    name: Merge when ready
+    if: >-
+      (github.event_name == 'pull_request' && github.event.label.name == 'automerge') ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.event == 'pull_request' &&
+       github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      # Always run the task code from main, never from the pull request.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - uses: astral-sh/setup-uv@v10.4.0 # no moving major tag upstream
+        with:
+          python-version: "3.13"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Merge if labelled and CI passed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number || github.event.workflow_run.pull_requests[0].number }}
+        run: uv run inv github.merge-if-ready --pr "$PR"

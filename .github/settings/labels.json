@@ -1,0 +1,7 @@
+[
+  {
+    "name": "automerge",
+    "color": "0e8a16",
+    "description": "Rebase-merge automatically once CI passes"
+  }
+]

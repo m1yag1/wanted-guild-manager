@@ -13,4 +13,13 @@ uv run inv github.apply-settings             # apply with your gh login
   force-push or deletion). GitHub only allows rulesets on private repositories
   on a paid plan, so the task skips it with a message until then.
 
+- `labels.json`: labels the task creates or updates, such as `automerge`.
+
 Dependabot version updates are configured in `.github/dependabot.yml`.
+
+## Auto-merge
+
+Add the `automerge` label to a pull request, from the GitHub app or with
+`gh pr edit <number> --add-label automerge`. The Auto-merge workflow then
+rebase-merges it as soon as the "Lint, types and tests" check passes (right away
+if it already has). No approval is needed. Remove the label to cancel.
