@@ -37,7 +37,7 @@ default_status = "proposed"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--cov=wgm --cov-branch --cov-report=term-missing --cov-fail-under=100"
+addopts = "--import-mode=importlib --cov=wgm --cov-branch --cov-report=term-missing --cov-fail-under=100"
 
 [tool.mypy]
 strict = true

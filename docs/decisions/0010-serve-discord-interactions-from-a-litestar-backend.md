@@ -1,6 +1,6 @@
 # Serve Discord interactions from a Litestar backend
 
-* Status: proposed
+* Status: accepted
 * Date: 2026-11-26
 
 ## Context and Problem Statement
@@ -9,10 +9,10 @@ A Discord app can receive slash commands over a gateway connection it keeps open
 
 ## Decision
 
-Proposed: a Litestar backend receives Discord interactions over HTTPS.
+a Litestar backend receives Discord interactions over HTTPS.
 
 * Discord sends every slash command, button press and autocomplete request to `POST /discord/interactions`. The server checks the Ed25519 signature with the application's public key and rejects anything unsigned.
-* Litestar with type hints, always built by a `create_app()` factory, following the Litestar agent skills in `.claude/skills/`. Served by Granian through `litestar-granian`'s `GranianPlugin` and `litestar run`, as a systemd service on the droplet, behind nginx with certbot (ADR 0006).
+* Litestar with type hints, laid out as `src/wgm/server` (app factory, plugins) and `src/wgm/domain/<area>` (controllers, schemas, services) per the Litestar skill, always built by a `create_app()` factory, following the Litestar agent skills in `.claude/skills/`. Served by Granian through `litestar-granian`'s `GranianPlugin` and `litestar run`, as a systemd service on the droplet, behind nginx with certbot (ADR 0006).
 * Route handlers stay thin and call plain, typed functions for the rules. Tests use pytest and Litestar's test client at 100% (ADR 0003), with a generated test key for signatures.
 * Unit tests run fully offline: incoming interactions are realistic payloads signed with a test key; outgoing Discord calls use `httpx` and are mocked with `respx` using recorded responses in `tests/fixtures/discord/`. Manual tries happen on the staging droplet.
 * Structured JSON logs (Litestar's structlog plugin) go to journald. `inv logs` and `inv status` show logs, service state, version and certificate expiry without logging in by hand. Tokens and message contents are never logged.

@@ -1,6 +1,7 @@
 # Build the prototype as a static site with browser storage
 
-* Status: accepted
+* Status: superseded
+* Superseded by: [ADR-0009](0009-use-discord-slash-commands-as-the-main-interface.md). The prototype is kept under the git tag `web-prototype`.
 * Date: 2026-11-25
 
 ## Context and Problem Statement

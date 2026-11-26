@@ -2,7 +2,7 @@ import pytest
 from litestar.status_codes import HTTP_200_OK
 from litestar.testing import AsyncTestClient
 
-from wgm.app import create_app
+from wgm.server.app import create_app
 
 
 @pytest.mark.anyio

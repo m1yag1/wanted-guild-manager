@@ -30,7 +30,7 @@ repos:
       - id: conventional-pre-commit
         stages: [commit-msg]
 
-  # These use the project's own environments, so versions match uv.lock and package-lock.json.
+  # These use the project's own environment, so versions match uv.lock.
   - repo: local
     hooks:
       - id: mypy
@@ -39,21 +39,9 @@ repos:
         language: system
         types: [python]
         pass_filenames: false
-      - id: prettier
-        name: prettier
-        entry: npx prettier --check
-        language: system
-        types_or: [html, css, javascript, json, markdown, yaml]
       - id: pytest
         name: pytest (100% coverage)
         entry: uv run pytest -q
-        language: system
-        pass_filenames: false
-        always_run: true
-        stages: [pre-push]
-      - id: vitest
-        name: vitest (100% coverage)
-        entry: npm run test:coverage --silent
         language: system
         pass_filenames: false
         always_run: true

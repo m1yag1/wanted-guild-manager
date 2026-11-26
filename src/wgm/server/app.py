@@ -2,13 +2,13 @@
 
 Run the server with Granian through the Litestar CLI:
 
-    uv run litestar --app wgm.app:create_app run
+    uv run litestar --app wgm.server.app:create_app run
 """
 
 from litestar import Litestar
-from litestar_granian import GranianPlugin
 
-from wgm.health import HealthController
+from wgm.domain.system.controllers import SystemController
+from wgm.server import plugins
 
 
 def create_app() -> Litestar:
@@ -18,6 +18,6 @@ def create_app() -> Litestar:
         The configured application.
     """
     return Litestar(
-        route_handlers=[HealthController],
-        plugins=[GranianPlugin()],
+        route_handlers=[SystemController],
+        plugins=[plugins.granian],
     )

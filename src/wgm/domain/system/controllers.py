@@ -1,19 +1,14 @@
-"""Health check routes."""
+"""System routes."""
 
-import msgspec
 from litestar import Controller, get
 
-
-class PingResponse(msgspec.Struct):
-    """Body of a successful health check."""
-
-    message: str
+from wgm.domain.system.schemas import PingResponse
 
 
-class HealthController(Controller):
+class SystemController(Controller):
     """Routes that report whether the server is up."""
 
-    tags = ["Health"]
+    tags = ["System"]
 
     @get("/ping")
     async def ping(self) -> PingResponse:

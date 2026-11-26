@@ -1,47 +1,47 @@
 # Wanted Guild Manager
 
-Create and track sign ups for Wanted Guild PvX events in Throne and Liberty.
+Create and track sign ups for Wanted Guild PvX events in Throne and Liberty,
+from Discord slash commands.
 
-This is a prototype. The plan and its reasons are in [docs/decisions](docs/decisions).
+The plan and its reasons are in [docs/decisions](docs/decisions).
 
 ## Requirements
 
 - [uv](https://docs.astral.sh/uv/) for Python packages
 - [invoke](https://www.pyinvoke.org/) for tasks
 - [git-cliff](https://git-cliff.org/) for the changelog
-- Node.js 24 (see `.nvmrc`) for the site
 
 ## Setup
 
 ```bash
 uv sync
-npm ci
+uv run pre-commit install --hook-type pre-commit --hook-type commit-msg --hook-type pre-push
 ```
 
 ## The backend
 
 A Litestar app served by Granian (ADR 0010). It follows the Litestar agent
-skills in `.claude/skills/`: the app is always built by `create_app()`.
+skills in `.claude/skills/`, and the app is always built by `create_app()`.
 
 ```bash
-uv run litestar --app wgm.app:create_app run   # http://127.0.0.1:8000/ping
-uv run pytest                                  # tests with the 100% coverage gate
-uv run ruff check && uv run ruff format --check && uv run mypy
+uv run litestar --app wgm.server.app:create_app run   # http://127.0.0.1:8000/ping
+uv run pytest                                         # tests with the 100% coverage gate
+uv run pre-commit run --all-files                     # ruff, mypy and file checks
 ```
 
-## The site (parked)
+## Layout
 
-```bash
-npm run dev     # local dev server
-npm run check   # format check, tests with the 100% coverage gate, build
+```text
+src/wgm/
+  server/          create_app() and plugins
+  domain/<area>/   controllers, schemas and services for one area
+tests/unit/        mirrors src/wgm
 ```
-
-The site is plain HTML, CSS and JavaScript (ADR 0002). Event and sign-up rules
-live in `src/events.js`, saving in `src/storage.js`, page building in
-`src/render.js`, and `src/app.js` wires them to the page.
 
 ## Commits and releases
 
 Commits follow [Conventional Commits](https://www.conventionalcommits.org/),
-for example `feat(signup): block sign ups when an event is full`.
-`git-cliff` builds `CHANGELOG.md` from them when we release.
+for example `feat(signup): block sign ups when an event is full`. A hook checks
+each message. `git-cliff` builds `CHANGELOG.md` from them when we release.
+
+The earlier static web prototype is kept under the git tag `web-prototype`.

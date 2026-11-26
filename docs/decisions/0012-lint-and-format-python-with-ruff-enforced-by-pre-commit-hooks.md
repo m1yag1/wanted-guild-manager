@@ -1,6 +1,6 @@
 # Lint and format Python with ruff, enforced by pre-commit hooks
 
-* Status: proposed
+* Status: accepted
 * Date: 2026-11-26
 
 ## Context and Problem Statement
@@ -9,13 +9,11 @@ Python code must be formatted and checked the same way on every commit, without 
 
 ## Decision
 
-Proposed:
-
 * `ruff check --fix` lints and `ruff format` formats Python. `ruff format` produces black's style, so black itself is not added.
-* pre-commit runs on every commit: file hygiene checks, ruff, mypy (strict, through `uv run`), and prettier for the parked web files.
+* pre-commit runs on every commit: file hygiene checks, ruff, and mypy (strict, through `uv run`).
 * The commit-msg hook enforces Conventional Commits (ADR 0008).
-* The pre-push hook runs pytest and Vitest with the 100% coverage gates (ADR 0003).
-* Hooks that need project tools run through `uv run` or `npx`, so their versions match `uv.lock` and `package-lock.json`.
+* The pre-push hook runs pytest with the 100% coverage gate (ADR 0003).
+* Hooks that need project tools run through `uv run` so their versions match `uv.lock`.
 
 ## Consequences
 

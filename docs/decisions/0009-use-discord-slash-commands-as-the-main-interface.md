@@ -1,6 +1,6 @@
 # Use Discord slash commands as the main interface
 
-* Status: proposed
+* Status: accepted
 * Date: 2026-11-25
 
 ## Context and Problem Statement
@@ -9,7 +9,7 @@ The guild manager tried the idea of the web prototype (ADR 0002) and prefers run
 
 ## Decision
 
-Proposed: Discord slash commands become the main interface for creating events and signing up.
+Discord slash commands become the main interface for creating events and signing up.
 
 * Every command sits under one top-level `/wgm` command: `/wgm help`, `/wgm event list|create|edit|cancel`, `/wgm signup`, `/wgm withdraw` and `/wgm roster`.
 * Everyone can list events, sign up, withdraw, see rosters and get help. Creating, editing and cancelling events need a manager role.
@@ -17,7 +17,7 @@ Proposed: Discord slash commands become the main interface for creating events a
 * The bot creates the roles it needs (to start, `WGM Manager`) with one idempotent setup step: automatically when Discord reports the app was added to a server (the invite asks for Manage Roles), again with `/wgm setup` (Manage Server only), or from the command line with `inv discord.setup-roles --guild <id>`. It never deletes or renames roles and never assigns them to members.
 * Each event is posted in the channel with the start time in every reader's time zone (Discord timestamps), counts per role, and Tank, Healer, DPS and Withdraw buttons. The post updates on every change.
 * The event and sign-up rules from the web prototype move to a Python module with the same behaviour and tests.
-* The web prototype stays in the repository, parked. If accepted, this ADR supersedes ADR 0002.
+* The web prototype stays in the repository, parked. This ADR supersedes ADR 0002; the prototype is kept under the git tag `web-prototype`.
 
 ## Consequences
 
