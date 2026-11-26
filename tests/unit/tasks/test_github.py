@@ -13,6 +13,7 @@ from tasks.github import (
     GhCli,
     GhError,
     apply,
+    apply_label,
     apply_ruleset,
     apply_settings,
 )
@@ -35,7 +36,7 @@ def _ruleset() -> dict[str, Any]:
 
 def test_settings_files_are_valid_json() -> None:
     for path in SETTINGS_DIR.glob("*.json"):
-        assert isinstance(json.loads(path.read_text()), dict), path
+        assert isinstance(json.loads(path.read_text()), dict | list), path
 
 
 def test_applies_repo_settings_and_skips_the_paid_ruleset(
@@ -51,6 +52,7 @@ def test_applies_repo_settings_and_skips_the_paid_ruleset(
         ["PATCH", REPO],
         ["PUT", f"{REPO}/vulnerability-alerts"],
         ["PUT", f"{REPO}/automated-security-fixes"],
+        ["PATCH", f"{REPO}/labels/automerge"],
         ["GET", f"{REPO}/rulesets"],
     ]
     sent = json.loads(calls[0]["stdin"])
@@ -124,7 +126,13 @@ def test_task_uses_the_given_gh(
 
     apply_settings(Context(), gh=str(gh.path))
 
-    assert [call["args"][2] for call in gh.calls()] == ["PATCH", "PUT", "PUT", "GET"]
+    assert [call["args"][2] for call in gh.calls()] == [
+        "PATCH",
+        "PUT",
+        "PUT",
+        "PATCH",
+        "GET",
+    ]
     assert "Skipped the protect-main ruleset" in capsys.readouterr().out
 
 
@@ -138,9 +146,53 @@ def test_leaves_security_settings_alone_when_not_requested(
     settings_dir = tmp_path / "settings"
     settings_dir.mkdir()
     (settings_dir / "repo.json").write_text('{"has_wiki": false}')
+    (settings_dir / "labels.json").write_text("[]")
     (settings_dir / "main-ruleset.json").write_text(json.dumps(_ruleset()))
     gh = fake_gh({RULESETS: PAID_PLAN_ONLY})
 
     apply(GhCli(str(gh.path)), settings_dir, print)
 
     assert [call["args"][2] for call in gh.calls()] == ["PATCH", "GET"]
+
+
+LABEL = {"name": "automerge", "color": "0e8a16", "description": "Merge me"}
+
+
+def test_updates_an_existing_label(fake_gh: MakeFakeGh) -> None:
+    gh = fake_gh({})
+    messages: list[str] = []
+
+    apply_label(GhCli(str(gh.path)), LABEL, messages.append)
+
+    assert [c["args"][2:4] for c in gh.calls()] == [
+        ["PATCH", f"{REPO}/labels/automerge"]
+    ]
+    assert messages == ["Updated the automerge label."]
+
+
+def test_creates_a_missing_label(fake_gh: MakeFakeGh) -> None:
+    gh = fake_gh(
+        {
+            f"PATCH {REPO}/labels/automerge": {
+                "code": 1,
+                "stderr": "gh: Not Found (HTTP 404)",
+            }
+        }
+    )
+    messages: list[str] = []
+
+    apply_label(GhCli(str(gh.path)), LABEL, messages.append)
+
+    last = gh.calls()[-1]
+    assert last["args"][2:4] == ["POST", f"{REPO}/labels"]
+    assert json.loads(last["stdin"]) == LABEL
+    assert messages == ["Created the automerge label."]
+
+
+def test_other_label_errors_are_raised(fake_gh: MakeFakeGh) -> None:
+    gh = fake_gh(
+        {f"PATCH {REPO}/labels/automerge": {"code": 1, "stderr": "gh: (HTTP 500)"}}
+    )
+
+    with pytest.raises(GhError):
+        apply_label(GhCli(str(gh.path)), LABEL, print)
