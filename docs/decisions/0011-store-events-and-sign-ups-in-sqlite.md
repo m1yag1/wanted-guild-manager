@@ -9,11 +9,11 @@ With a bot, sign ups are shared by the whole guild, so they can no longer live i
 
 ## Decision
 
-Proposed: store events and sign ups in a single SQLite file next to the bot, using Python's built-in `sqlite3` module.
+Proposed: store events and sign ups in a single SQLite file on the droplet, through Advanced Alchemy (SQLAlchemy for Litestar) with the aiosqlite driver, as in byob-backend.
 
-* A small storage module with plain functions (`create_event`, `add_signup` and so on) and a schema created on start.
-* Tests use an in-memory database.
-* On the droplet the file lives outside the release folder so deploys keep the data. A copy is taken before each deploy.
+* A few tables (events, sign ups, server settings), with migrations from Advanced Alchemy's Alembic integration.
+* Tests use a temporary database.
+* Each environment has its own file, kept outside the release folder so deploys keep the data. A copy is taken before each deploy.
 
 ## Consequences
 
@@ -25,10 +25,10 @@ Proposed: store events and sign ups in a single SQLite file next to the bot, usi
 ### Negative
 
 * One process writes at a time, which is fine at this size.
-* Moving to a server database later means a migration.
+* Moving to PostgreSQL later is mostly a connection change, though data still needs copying.
 
 ## Considered Alternatives
 
 * PostgreSQL (managed or on the droplet): more than this size needs.
 * A JSON file: simple, but easy to corrupt if two writes overlap.
-* An ORM such as SQLAlchemy: more abstraction than a handful of tables needs.
+* Plain `sqlite3`: fewer dependencies, but blocking calls inside an async server and hand-written migrations.
