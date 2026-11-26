@@ -1,6 +1,6 @@
 # Store events and sign ups in SQLite
 
-* Status: proposed
+* Status: accepted
 * Date: 2026-11-25
 
 ## Context and Problem Statement
@@ -9,7 +9,7 @@ With a bot, sign ups are shared by the whole guild, so they can no longer live i
 
 ## Decision
 
-Proposed: store events and sign ups in a single SQLite file on the droplet, through Advanced Alchemy (SQLAlchemy for Litestar) with the aiosqlite driver, as in byob-backend.
+Store events and sign ups in a single SQLite file on the droplet, through Advanced Alchemy (SQLAlchemy for Litestar) with the aiosqlite driver. SQLAlchemy keeps the database swappable: moving to PostgreSQL or another backend is a connection change.
 
 * A few tables (events, sign ups, server settings), with migrations from Advanced Alchemy's Alembic integration.
 * Tests use a temporary database.

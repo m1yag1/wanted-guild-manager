@@ -5,7 +5,7 @@
 
 ## Context and Problem Statement
 
-Python code must be formatted and checked the same way on every commit, without relying on memory. Mike asked for black and pre-commit hooks. The Litestar styleguide skill says to use `ruff format` and never combine it with black, and dark-madr already uses ruff for both.
+Python code must be formatted and checked the same way on every commit, without relying on memory. black and pre-commit hooks were requested. The Litestar styleguide skill says to use `ruff format` and never combine it with black.
 
 ## Decision
 

@@ -12,7 +12,7 @@ We want versioning tracked from the start and a changelog at each release, witho
 * Every commit follows Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:` and so on, with an optional scope).
 * The git tag (`vX.Y.Z`) is the only source of the version. The site build reads it with `git describe` and shows it in the footer and in `/version.json`.
 * `inv release` runs `git cliff --bump` to choose the next version from the commits, writes `CHANGELOG.md`, commits it as `chore(release): prepare for vX.Y.Z` and tags the commit.
-* `cliff.toml` follows the dark-madr setup: Keep a Changelog format, commits grouped as Added, Fixed, Documentation and so on.
+* `cliff.toml` uses the Keep a Changelog format, with commits grouped as Added, Fixed, Documentation and so on.
 * The code stays in a local repository until a remote is needed.
 
 ## Consequences

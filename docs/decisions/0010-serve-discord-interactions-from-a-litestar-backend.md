@@ -39,7 +39,7 @@ a Litestar backend receives Discord interactions over HTTPS.
 
 * Gateway bot with discord.py: no public URL needed and simple reminders, but a long-running connection and no natural place for a web API.
 * Serverless endpoint (Cloudflare Workers, DigitalOcean Functions): no server, but a new platform and storage, and a move away from Python and the droplet.
-* FastAPI with uvicorn: equally suitable; Litestar and Granian were chosen to match Mike's other projects.
+* FastAPI with uvicorn: equally suitable; Litestar and Granian were chosen for their first-party integration (`litestar-granian`) and the maintainer's familiarity with them.
 
 ## More Information
 

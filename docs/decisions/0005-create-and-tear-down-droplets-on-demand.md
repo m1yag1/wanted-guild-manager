@@ -5,7 +5,7 @@
 
 ## Context and Problem Statement
 
-The guild manager needs a link to try the prototype. A droplet costs money while it runs and is only needed during feedback sessions. Setting one up by hand, as in do-jupyterhub, takes several manual steps.
+The guild manager needs a link to try the prototype. A droplet costs money while it runs and is only needed during feedback sessions. Setting one up by hand takes several manual steps.
 
 ## Decision
 
@@ -15,7 +15,7 @@ Droplets are created and torn down on demand with invoke tasks:
 * `inv droplet.down` deletes the droplet after its name is typed to confirm, and removes the inventory.
 * `inv droplet.status` shows the droplet, its IP and its link.
 * The droplet is tagged `wgm`. Teardown only deletes a droplet with that tag and that name.
-* Provisioning follows do-jupyterhub (Ansible and nginx templates), hardened: a `deploy` user, no root or password SSH login, and a firewall that allows only ports 22, 80 and 443.
+* Provisioning uses Ansible and nginx templates, hardened with a `deploy` user, no root or password SSH login, and a firewall that allows only ports 22, 80 and 443.
 * The DigitalOcean token stays in `doctl auth init`, never in the repo.
 
 ## Consequences
@@ -24,7 +24,7 @@ Droplets are created and torn down on demand with invoke tasks:
 
 * A working site in one command and no cost when it is down.
 * Servers are rebuilt from code every time, so nothing drifts.
-* Other droplets on the account, such as JupyterHub, are never touched.
+* Other droplets on the account are never touched.
 
 ### Negative
 
@@ -36,7 +36,3 @@ Droplets are created and torn down on demand with invoke tasks:
 * A long-lived droplet set up by hand: no changing link, but costs money all the time and drifts.
 * Terraform: strong for larger setups, but more than one droplet needs.
 * DigitalOcean App Platform static sites: no server to manage, but moves away from the droplet and Ansible setup that later phases need.
-
-## More Information
-
-Based on /Users/blackbird/Projects/01_personal/do-jupyterhub.

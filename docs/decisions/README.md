@@ -10,5 +10,5 @@
 * [ADR-0008](0008-use-conventional-commits-git-tags-and-git-cliff-for-releases.md) - Use Conventional Commits Git Tags And Git Cliff For Releases - accepted
 * [ADR-0009](0009-use-discord-slash-commands-as-the-main-interface.md) - Use Discord Slash Commands As The Main Interface - accepted
 * [ADR-0010](0010-serve-discord-interactions-from-a-litestar-backend.md) - Serve Discord Interactions From A Litestar Backend - accepted
-* [ADR-0011](0011-store-events-and-sign-ups-in-sqlite.md) - Store Events And Sign Ups In Sqlite - proposed
+* [ADR-0011](0011-store-events-and-sign-ups-in-sqlite.md) - Store Events And Sign Ups In Sqlite - accepted
 * [ADR-0012](0012-lint-and-format-python-with-ruff-enforced-by-pre-commit-hooks.md) - Lint And Format Python With Ruff Enforced By Pre Commit Hooks - accepted
