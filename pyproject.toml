@@ -17,6 +17,7 @@ dev = [
     "dark-madr",
     "httpx",
     "mypy",
+    "pre-commit>=4.7.0",
     "pytest",
     "pytest-cov",
     "ruff",

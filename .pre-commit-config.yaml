@@ -1,0 +1,60 @@
+# Install once: pre-commit install --hook-type pre-commit --hook-type commit-msg --hook-type pre-push
+# Run by hand:  pre-commit run --all-files
+exclude: ^\.claude/
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: check-added-large-files
+      - id: check-merge-conflict
+      - id: debug-statements
+      - id: check-executables-have-shebangs
+
+  # Ruff lints and formats Python (Black-compatible style). See ADR 0012.
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.6
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v4.5.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+
+  # These use the project's own environments, so versions match uv.lock and package-lock.json.
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy
+        entry: uv run mypy
+        language: system
+        types: [python]
+        pass_filenames: false
+      - id: prettier
+        name: prettier
+        entry: npx prettier --check
+        language: system
+        types_or: [html, css, javascript, json, markdown, yaml]
+      - id: pytest
+        name: pytest (100% coverage)
+        entry: uv run pytest -q
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+      - id: vitest
+        name: vitest (100% coverage)
+        entry: npm run test:coverage --silent
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]

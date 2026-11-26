@@ -11,4 +11,4 @@
 * [ADR-0009](0009-use-discord-slash-commands-as-the-main-interface.md) - Use Discord Slash Commands As The Main Interface - proposed
 * [ADR-0010](0010-serve-discord-interactions-from-a-litestar-backend.md) - Serve Discord Interactions From A Litestar Backend - proposed
 * [ADR-0011](0011-store-events-and-sign-ups-in-sqlite.md) - Store Events And Sign Ups In Sqlite - proposed
-
+* [ADR-0012](0012-lint-and-format-python-with-ruff-enforced-by-pre-commit-hooks.md) - Lint And Format Python With Ruff Enforced By Pre Commit Hooks - proposed
