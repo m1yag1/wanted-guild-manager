@@ -3,3 +3,4 @@ dist/
 docs/decisions/
 uv.lock
 package-lock.json
+.claude/
