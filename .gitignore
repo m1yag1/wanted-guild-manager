@@ -18,3 +18,7 @@ ansible/inventories/*.yaml
 # Local
 .env
 .DS_Store
+
+# Project Claude skills are tracked even though the global gitignore skips .claude
+!.claude/
+.claude/settings.local.json
