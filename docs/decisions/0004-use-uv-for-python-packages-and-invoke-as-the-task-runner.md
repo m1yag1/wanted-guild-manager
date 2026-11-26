@@ -31,7 +31,7 @@ We need one simple way to install tools and run every task (tests, build, deploy
 
 * tox: useful for testing against several Python versions, but uv already creates environments and invoke already runs steps. Add tox with the `tox-uv` plugin if we ever need a version matrix.
 * Make: available everywhere, but harder to write and test than Python tasks.
-* Plain shell scripts, as in do-jupyterhub: simple, but harder to test to 100%.
+* Plain shell scripts: simple, but harder to test to 100%.
 
 ## More Information
 
