@@ -41,6 +41,14 @@ class Event(UUIDAuditBase):
     channel_id: Mapped[str | None] = mapped_column(String(32), default=None)
     message_id: Mapped[str | None] = mapped_column(String(32), default=None)
     """The event's post in Discord, updated as people sign up."""
+    closes_at: Mapped[datetime | None] = mapped_column(
+        DateTimeUTC(timezone=True), default=None
+    )
+    """When members can no longer change their answer (admins still can)."""
+    closed_post_at: Mapped[datetime | None] = mapped_column(
+        DateTimeUTC(timezone=True), default=None
+    )
+    """When the post was locked after closing; empty until the job does it."""
     cancelled_at: Mapped[datetime | None] = mapped_column(
         DateTimeUTC(timezone=True), default=None
     )

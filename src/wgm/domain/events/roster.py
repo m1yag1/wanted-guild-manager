@@ -32,6 +32,23 @@ def when(moment: datetime) -> str:
     return f"<t:{seconds}:F> (<t:{seconds}:R>)"
 
 
+def closes(event: Event) -> datetime:
+    """When sign-ups close. Events made before closing existed close at the start."""
+    return event.closes_at or event.starts_at
+
+
+def is_closed(event: Event, now: datetime) -> bool:
+    """Whether members can no longer change their answer."""
+    return now >= closes(event)
+
+
+def closing_line(event: Event, now: datetime) -> str:
+    """Sign-ups close <t:...:R> / Sign-ups closed <t:...:R>"""
+    seconds = int(closes(event).timestamp())
+    verb = "closed" if is_closed(event, now) else "close"
+    return f"Sign-ups {verb} <t:{seconds}:R>"
+
+
 def counts(event: Event) -> dict[SignupStatus, int]:
     """How many members gave each answer."""
     totals = dict.fromkeys(SignupStatus, 0)
@@ -75,13 +92,14 @@ def roster(event: Event) -> str:
     return "\n".join(lines)
 
 
-def event_post(event: Event) -> str:
-    """The full post: heading, then the roster underneath."""
-    return f"{heading(event)}\n\n{roster(event)}"
+def event_post(event: Event, now: datetime) -> str:
+    """The full post: heading and closing time, then the roster underneath."""
+    return f"{heading(event)}\n{closing_line(event, now)}\n\n{roster(event)}"
 
 
-def buttons(event: Event) -> list[dict[str, Any]]:
-    """One row of sign-up buttons for the post."""
+def buttons(event: Event, now: datetime) -> list[dict[str, Any]]:
+    """One row of sign-up buttons for the post, greyed out once closed."""
+    closed = is_closed(event, now)
     return [
         {
             "type": 1,  # action row
@@ -91,6 +109,7 @@ def buttons(event: Event) -> list[dict[str, Any]]:
                     "style": BUTTON_STYLES.get(choice, PRIMARY),
                     "label": label,
                     "custom_id": f"signup:{event.id}:{choice}",
+                    "disabled": closed,
                 }
                 for choice, label in BUTTON_LABELS.items()
             ],

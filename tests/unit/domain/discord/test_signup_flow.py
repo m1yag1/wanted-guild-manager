@@ -1,6 +1,9 @@
 """Event channel config, posting there, and the sign-up buttons."""
 
+from datetime import UTC, datetime, timedelta
 from typing import Any
+from uuid import UUID
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -12,12 +15,17 @@ from tests.fixtures.discord import (
     MakeCommand,
 )
 from tests.fixtures.discord_api import FakeDiscordApi
+from wgm.db.config import database_config
+from wgm.domain.events.services import EventService
+from wgm.lib.settings import Settings
 
 CHANNEL = "777"
 APP_ID = "1310000000000000000"
 POSTING = str((1 << 10) | (1 << 11) | (1 << 14) | (1 << 16))
 EVENT = {"title": "Siege night", "type": "Siege", "date": "2099-12-05", "time": "20:00"}
 ADMIN = {"roles": (ADMIN_ROLE_ID,)}
+# 2099-12-05 20:00 Eastern is 2099-12-06 01:00 UTC.
+STARTS = datetime(2099, 12, 6, 1, 0, tzinfo=UTC)
 
 
 @pytest.fixture(autouse=True)
@@ -243,3 +251,111 @@ async def test_setup_checks_the_event_channel(
     assert "Next, choose where events go" in _content(first)
     assert "✅ View Channel" in _content(second)
     assert "❌ Send Messages" in _content(second)
+
+
+def _closes(post: dict[str, Any]) -> str:
+    content = str(post["content"])
+    return next(line for line in content.splitlines() if line.startswith("Sign-ups"))
+
+
+def _stamp(moment: datetime) -> int:
+    return int(moment.timestamp())
+
+
+@pytest.mark.anyio
+async def test_sign_ups_close_30_minutes_before_unless_chosen(
+    interact: Interact,
+    wgm_command: MakeCommand,
+    roles: FakeDiscordApi,
+) -> None:
+    await interact(wgm_command("event create", **ADMIN, **EVENT))
+    default = _closes(_last_post(roles))
+    await interact(wgm_command("event create", close=0, **ADMIN, **EVENT))
+    at_start = _closes(_last_post(roles))
+    listed = await interact(wgm_command("event list"))
+
+    half_hour = _stamp(STARTS - timedelta(minutes=30))
+    assert default == f"Sign-ups close <t:{half_hour}:R>"
+    assert at_start == f"Sign-ups close <t:{_stamp(STARTS)}:R>"
+    assert f"Sign-ups close <t:{half_hour}:R>\nAttending 0" in _content(listed)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("minutes", "said"),
+    [
+        (60, "60 minutes before the start"),
+        (1, "1 minute before the start"),
+        (0, "at the start"),
+    ],
+)
+async def test_admins_choose_the_server_close_time(
+    interact: Interact,
+    wgm_command: MakeCommand,
+    roles: FakeDiscordApi,
+    minutes: int,
+    said: str,
+) -> None:
+    before = await interact(wgm_command("event settings", **ADMIN))
+    reply = await interact(wgm_command("event close-time", minutes=minutes, **ADMIN))
+    after = await interact(wgm_command("event settings", **ADMIN))
+    await interact(wgm_command("event create", **ADMIN, **EVENT))
+
+    assert "Sign-ups close: 30 minutes before the start" in _content(before)
+    assert _content(reply).startswith(f"Sign-ups for new events will close {said}.")
+    assert f"Sign-ups close: {said}" in _content(after)
+    closes = _stamp(STARTS - timedelta(minutes=minutes))
+    assert _closes(_last_post(roles)) == f"Sign-ups close <t:{closes}:R>"
+
+
+@pytest.mark.anyio
+async def test_members_cannot_change_the_close_time(
+    interact: Interact, wgm_command: MakeCommand
+) -> None:
+    reply = await interact(wgm_command("event close-time", minutes=5))
+
+    assert _content(reply).startswith("You need the wgm-admin role")
+
+
+@pytest.mark.anyio
+async def test_events_whose_sign_ups_would_already_be_closed_are_refused(
+    interact: Interact,
+    wgm_command: MakeCommand,
+    roles: FakeDiscordApi,
+) -> None:
+    soon = datetime.now(ZoneInfo("America/New_York")) + timedelta(hours=1)
+    event = {**EVENT, "date": f"{soon:%Y-%m-%d}", "time": f"{soon:%H:%M}"}
+
+    reply = await interact(wgm_command("event create", close=120, **ADMIN, **event))
+
+    assert "already passed" in _content(reply)
+    assert not [r for r in roles.requests if r.method == "POST"]
+
+
+@pytest.mark.anyio
+async def test_buttons_refuse_changes_after_sign_ups_close(
+    interact: Interact,
+    wgm_command: MakeCommand,
+    wgm_button: MakeButton,
+    roles: FakeDiscordApi,
+    settings: Settings,
+) -> None:
+    event_id = await _event_id(interact, roles, wgm_command)
+    await interact(wgm_button(f"signup:{event_id}:tank"))
+    closed = datetime.now(UTC) - timedelta(minutes=1)
+    async with database_config(settings.database_url).get_session() as session:
+        events = EventService(session=session)
+        event = await events.get(UUID(event_id))
+        event.closes_at = closed
+        await events.update(event, auto_commit=True)
+
+    reply = await interact(wgm_button(f"signup:{event_id}:dps"))
+    listed = await interact(wgm_command("event list"))
+
+    assert reply["type"] == 4
+    assert reply["data"]["flags"] == 64
+    assert _content(reply).startswith(
+        f"Sign-ups for **Siege night** closed <t:{_stamp(closed)}:R>"
+    )
+    assert "wgm-admin" in _content(reply)
+    assert "Attending 1" in _content(listed)

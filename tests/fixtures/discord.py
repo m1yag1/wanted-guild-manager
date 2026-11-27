@@ -3,6 +3,7 @@
 import json
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import pytest
 from nacl.signing import SigningKey
@@ -66,14 +67,15 @@ def wgm_command(discord_payload: LoadPayload) -> MakeCommand:
         roles: tuple[str, ...] = (),
         permissions: str = "0",
         in_server: bool = True,
-        **values: str,
+        **values: str | int,
     ) -> bytes:
         payload = json.loads(discord_payload("application_command"))
-        options = [
-            {"name": name, "type": 3, "value": value} for name, value in values.items()
+        options: list[dict[str, Any]] = [
+            {"name": name, "type": 4 if isinstance(value, int) else 3, "value": value}
+            for name, value in values.items()
         ]
         for name in reversed(path.split()):
-            kind = 1 if not options or options[0]["type"] == 3 else 2
+            kind = 1 if not options or options[0]["type"] in (3, 4) else 2
             options = [{"name": name, "type": kind, "options": options}]
         payload["data"]["options"] = options
         payload["member"]["roles"] = list(roles)

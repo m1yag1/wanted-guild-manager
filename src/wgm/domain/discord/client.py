@@ -1,11 +1,15 @@
 """The Discord REST calls the server makes while answering commands."""
 
+import time
+from collections.abc import Callable
 from typing import Any
 
 import httpx
-from attrs import frozen
+from attrs import field, frozen
 
 USER_AGENT = "DiscordBot (wanted-guild-manager, 0.1)"
+ROLE_NAMES_SECONDS = 60.0
+"""How long role IDs by name are reused before asking Discord again."""
 
 
 class DiscordApiError(RuntimeError):
@@ -16,16 +20,30 @@ class DiscordApiError(RuntimeError):
         self.status = status
 
 
+def _message(content: str, components: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "content": content,
+        "components": components,
+        "allowed_mentions": {"parse": []},
+    }
+
+
 @frozen
 class DiscordClient:
     """Async calls to Discord's REST API as the bot.
 
     `http` is shared for the life of the app, so calls reuse connections.
+    Role IDs by name are kept for a minute, since every restricted command
+    needs them and they rarely change.
     """
 
     bot_token: str
     api_url: str
     http: httpx.AsyncClient
+    clock: Callable[[], float] = time.monotonic
+    _role_names: dict[str, tuple[float, dict[str, str]]] = field(
+        factory=dict, init=False
+    )
 
     async def _call(self, method: str, path: str, body: Any = None) -> Any:
         response = await self.http.request(
@@ -49,8 +67,13 @@ class DiscordClient:
         return roles
 
     async def role_ids(self, guild_id: str) -> dict[str, str]:
-        """Role IDs in a server, keyed by role name."""
-        return {role["name"]: role["id"] for role in await self.roles(guild_id)}
+        """Role IDs in a server, keyed by role name. Reused for a minute."""
+        cached = self._role_names.get(guild_id)
+        if cached and self.clock() - cached[0] < ROLE_NAMES_SECONDS:
+            return cached[1]
+        names = {role["name"]: role["id"] for role in await self.roles(guild_id)}
+        self._role_names[guild_id] = (self.clock(), names)
+        return names
 
     async def member(self, guild_id: str, user_id: str) -> dict[str, Any]:
         """A server member, including their role IDs."""
@@ -69,6 +92,7 @@ class DiscordClient:
         role = await self._call(
             "POST", f"/guilds/{guild_id}/roles", {"name": name, "mentionable": False}
         )
+        self._role_names.pop(guild_id, None)
         return str(role["id"])
 
     async def post_message(
@@ -78,13 +102,23 @@ class DiscordClient:
         message = await self._call(
             "POST",
             f"/channels/{channel_id}/messages",
-            {
-                "content": content,
-                "components": components,
-                "allowed_mentions": {"parse": []},
-            },
+            _message(content, components),
         )
         return str(message["id"])
+
+    async def edit_message(
+        self,
+        channel_id: str,
+        message_id: str,
+        content: str,
+        components: list[dict[str, Any]],
+    ) -> None:
+        """Replace the text and buttons of a message the app posted."""
+        await self._call(
+            "PATCH",
+            f"/channels/{channel_id}/messages/{message_id}",
+            _message(content, components),
+        )
 
     async def edit_original(
         self, application_id: str, token: str, message: dict[str, Any]

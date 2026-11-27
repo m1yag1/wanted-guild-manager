@@ -1,14 +1,21 @@
 """Event rules and storage."""
 
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime, time, timedelta
+from typing import Any
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from advanced_alchemy.repository import SQLAlchemyAsyncRepository
 from advanced_alchemy.service import SQLAlchemyAsyncRepositoryService
-from sqlalchemy import select
+from sqlalchemy import func, select
 
-from wgm.db.models import Event, GuildSettings, Signup, SignupStatus
+from wgm.db.models import (
+    DEFAULT_CLOSE_MINUTES,
+    Event,
+    GuildSettings,
+    Signup,
+    SignupStatus,
+)
 
 EVENT_TYPES = (
     "Siege",
@@ -19,6 +26,8 @@ EVENT_TYPES = (
     "Arena",
     "Other",
 )
+MAX_CLOSE_MINUTES = 7 * 24 * 60
+"""Sign-ups can close at most a week before the start."""
 
 
 class EventInputError(ValueError):
@@ -49,6 +58,21 @@ def parse_start(day: str, clock: str, zone: ZoneInfo, now: datetime) -> datetime
     if starts_at <= now:
         raise EventInputError("That time has already passed.")
     return starts_at
+
+
+def closing_time(starts_at: datetime, minutes: int, now: datetime) -> datetime:
+    """When sign-ups close: `minutes` before the start, which must be later than now.
+
+    Raises:
+        EventInputError: Sign-ups would already be closed.
+    """
+    closes_at = starts_at - timedelta(minutes=minutes)
+    if closes_at <= now:
+        raise EventInputError(
+            f"Sign-ups would close {minutes} minutes before the start, which has "
+            "already passed. Use a later start or a smaller `close`."
+        )
+    return closes_at
 
 
 class EventService(SQLAlchemyAsyncRepositoryService[Event]):
@@ -99,6 +123,16 @@ class EventService(SQLAlchemyAsyncRepositoryService[Event]):
         """An event by ID, with its sign ups."""
         return await self.get_one_or_none(id=event_id)
 
+    async def due_to_lock(self, now: datetime) -> list[Event]:
+        """Posted events whose sign-ups have closed but whose post still has buttons."""
+        statement = select(Event).where(
+            func.coalesce(Event.closes_at, Event.starts_at) <= now,
+            Event.closed_post_at.is_(None),
+            Event.message_id.is_not(None),
+            Event.cancelled_at.is_(None),
+        )
+        return list(await self.repository.get_many(statement=statement))
+
 
 class GuildSettingsService(SQLAlchemyAsyncRepositoryService[GuildSettings]):
     """Stores per-server settings."""
@@ -113,14 +147,22 @@ class GuildSettingsService(SQLAlchemyAsyncRepositoryService[GuildSettings]):
     async def for_guild(self, guild_id: str) -> GuildSettings:
         """A server's settings, with defaults if never changed."""
         found = await self.get_one_or_none(guild_id=guild_id)
-        return found or GuildSettings(guild_id=guild_id)
+        return found or GuildSettings(
+            guild_id=guild_id, close_minutes=DEFAULT_CLOSE_MINUTES
+        )
+
+    async def _change(self, guild_id: str, **values: Any) -> GuildSettings:
+        settings = await self.get_one_or_none(guild_id=guild_id)
+        if settings is None:
+            return await self.create(GuildSettings(guild_id=guild_id, **values))
+        for name, value in values.items():
+            setattr(settings, name, value)
+        return await self.update(settings)
 
     async def set_event_channel(self, guild_id: str, channel_id: str) -> GuildSettings:
         """Choose where event posts go."""
-        settings = await self.get_one_or_none(guild_id=guild_id)
-        if settings is None:
-            return await self.create(
-                GuildSettings(guild_id=guild_id, event_channel_id=channel_id)
-            )
-        settings.event_channel_id = channel_id
-        return await self.update(settings)
+        return await self._change(guild_id, event_channel_id=channel_id)
+
+    async def set_close_minutes(self, guild_id: str, minutes: int) -> GuildSettings:
+        """Choose how long before the start sign-ups close, for new events."""
+        return await self._change(guild_id, close_minutes=minutes)
