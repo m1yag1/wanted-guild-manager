@@ -107,6 +107,14 @@ tests/unit/        mirrors src/wgm
 tests/fixtures/    shared pytest fixtures (plugins), with payloads in fixtures/data/
 ```
 
+## Conventions
+
+- Plain classes use [attrs](https://www.attrs.org/) (`@frozen`, `@define`),
+  with converters and validators instead of hand-written checks.
+- Request and response bodies for Litestar use `msgspec.Struct`.
+- Tests use fakes and dependency injection, never mocks or monkeypatching.
+- Tasks run commands through invoke (`c.run`), never `subprocess`.
+
 ## Commits and releases
 
 Commits follow [Conventional Commits](https://www.conventionalcommits.org/),

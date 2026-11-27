@@ -1,10 +1,10 @@
 """Build the app and deploy it to an environment on the droplet."""
 
 import shutil
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from attrs import frozen
 from invoke.context import Context
 from invoke.tasks import task
 
@@ -21,7 +21,7 @@ class DirtyTreeError(RuntimeError):
     """The working tree has uncommitted changes."""
 
 
-@dataclass(frozen=True, slots=True)
+@frozen
 class Build:
     """A wheel plus the pinned requirements it needs."""
 

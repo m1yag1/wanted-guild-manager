@@ -1,3 +1,6 @@
+from pathlib import Path
+
+import attrs
 import pytest
 
 from tasks.config import CONFIG_FILE, DropletConfig, Environment
@@ -31,3 +34,24 @@ def test_looks_up_environments_by_name(config: DropletConfig) -> None:
 def test_unknown_environments_list_the_choices(config: DropletConfig) -> None:
     with pytest.raises(ValueError, match="production, staging"):
         config.environment("qa")
+
+
+@pytest.mark.parametrize("port", [0, 70000, "8001"])
+def test_rejects_bad_ports(port: object) -> None:
+    with pytest.raises((ValueError, TypeError)):
+        Environment(name="staging", subdomain="staging", port=port)  # type: ignore[arg-type]
+
+
+def test_expands_home_in_key_paths(config: DropletConfig) -> None:
+    moved = attrs.evolve(config, ssh_key_path="~/.ssh/wgm_do")
+
+    assert moved.ssh_key_path == Path.home() / ".ssh" / "wgm_do"
+
+
+def test_unknown_settings_are_an_error(config_file: Path) -> None:
+    config_file.write_text(
+        config_file.read_text().replace('user = "deploy"', 'user = "deploy"\nusr = "x"')
+    )
+
+    with pytest.raises(TypeError, match="usr"):
+        DropletConfig.load(config_file)

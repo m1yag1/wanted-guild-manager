@@ -4,11 +4,11 @@ import json
 import re
 import tempfile
 from collections.abc import Callable
-from dataclasses import dataclass
 from http import HTTPStatus
 from pathlib import Path
 from typing import Any, Protocol
 
+from attrs import frozen
 from invoke.context import Context
 from invoke.tasks import task
 
@@ -40,7 +40,7 @@ class Gh(Protocol):
         """Call the GitHub API and return the decoded JSON response."""
 
 
-@dataclass(frozen=True, slots=True)
+@frozen
 class GhCli:
     """Calls the GitHub API through the `gh` command line tool."""
 
@@ -68,7 +68,7 @@ class GhCli:
         return json.loads(output) if output.strip() else None
 
 
-@dataclass(frozen=True, slots=True)
+@frozen
 class DryRunGh:
     """Prints each call instead of making it."""
 

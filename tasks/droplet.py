@@ -2,10 +2,10 @@
 
 import json
 from collections.abc import Callable
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from attrs import frozen
 from invoke.context import Context
 from invoke.tasks import task
 
@@ -18,7 +18,7 @@ Echo = Callable[[str], None]
 INVENTORY = ANSIBLE_DIR / "inventories" / "wgm.json"
 
 
-@dataclass(frozen=True, slots=True)
+@frozen
 class Droplet:
     """A droplet as DigitalOcean reports it."""
 
@@ -37,7 +37,7 @@ class Droplet:
         return cls(id=str(data["id"]), name=data["name"], ip=ip)
 
 
-@dataclass(frozen=True, slots=True)
+@frozen
 class Doctl:
     """The few `doctl` calls the tasks need."""
 
@@ -96,7 +96,7 @@ def ssh_options(config: DropletConfig) -> list[str]:
     ]  # fmt: skip
 
 
-@dataclass(frozen=True, slots=True)
+@frozen
 class Ansible:
     """Runs the project's playbooks against the droplet."""
 
@@ -130,7 +130,7 @@ class SshKeyError(RuntimeError):
     """The project SSH key cannot be used without a passphrase prompt."""
 
 
-@dataclass(frozen=True, slots=True)
+@frozen
 class SshTools:
     """The ssh programs used to check the key and the login user."""
 
