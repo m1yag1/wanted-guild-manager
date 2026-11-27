@@ -1,0 +1,47 @@
+"""Answer presses of the sign-up buttons under an event post."""
+
+from uuid import UUID
+
+from wgm.domain.discord.commands import NO_PINGS, CommandContext, private_reply
+from wgm.domain.discord.schemas import (
+    InteractionResponse,
+    InteractionResponseType,
+    MessageData,
+)
+from wgm.domain.events.roster import CHOICES, buttons, event_post
+
+
+def parse_custom_id(custom_id: str) -> tuple[UUID, str] | None:
+    """`signup:<event id>:<choice>` -> (event id, choice), or None."""
+    parts = custom_id.split(":")
+    if len(parts) != 3 or parts[0] != "signup" or parts[2] not in CHOICES:  # noqa: PLR2004
+        return None
+    try:
+        return UUID(parts[1]), parts[2]
+    except ValueError:
+        return None
+
+
+async def press(ctx: CommandContext) -> InteractionResponse:
+    """Record the member's answer and redraw the post."""
+    data = ctx.interaction.data
+    member = ctx.interaction.member
+    parsed = parse_custom_id(data.custom_id if data else "")
+    if parsed is None or member is None:
+        return private_reply("That button isn't one of ours.")
+    event = await ctx.events.find(parsed[0])
+    if event is None:
+        return private_reply("That event no longer exists.")
+    status, role = CHOICES[parsed[1]]
+    name = member.nick or member.user.global_name or member.user.username
+    event = await ctx.events.answer(
+        event, user_id=member.user.id, name=name, status=status, role=role
+    )
+    return InteractionResponse(
+        type=InteractionResponseType.UPDATE_MESSAGE,
+        data=MessageData(
+            content=event_post(event),
+            components=buttons(event),
+            allowed_mentions=NO_PINGS,
+        ),
+    )

@@ -1,12 +1,16 @@
 """Fixtures for building the application under test."""
 
+from collections.abc import Awaitable, Callable
 from pathlib import Path
+from typing import Any
 
 import pytest
 from advanced_alchemy.alembic.commands import AlembicCommands
 from litestar import Litestar
+from litestar.testing import AsyncTestClient
 from nacl.signing import SigningKey
 
+from tests.fixtures.discord import Sign
 from tests.fixtures.discord_api import FakeDiscordApi
 from wgm.db.config import database_config
 from wgm.lib.settings import DiscordSettings, Settings
@@ -45,3 +49,31 @@ def app(settings: Settings) -> Litestar:
     """The application built with test settings, on a migrated database."""
     AlembicCommands(sqlalchemy_config=database_config(settings.database_url)).upgrade()
     return create_app(settings)
+
+
+Interact = Callable[[bytes], Awaitable[dict[str, Any]]]
+
+
+@pytest.fixture
+def interact(app: Litestar, sign: Sign, discord_api: FakeDiscordApi) -> Interact:
+    """Send a signed interaction and return what the member ends up seeing.
+
+    Slash commands answer "thinking..." first and then edit in the real reply
+    through Discord's API, so for those this returns that edited-in reply.
+    """
+
+    async def send(body: bytes) -> dict[str, Any]:
+        signed, headers = sign(body)
+        async with AsyncTestClient(app=app) as client:
+            response = await client.post(
+                "/discord/interactions", content=signed, headers=headers
+            )
+        assert response.status_code == 200, response.text
+        reply: dict[str, Any] = response.json()
+        if reply["type"] != 5:
+            return reply
+        edit = [r for r in discord_api.requests if r.method == "PATCH"][-1]
+        assert edit.path.endswith("/messages/@original")
+        return {"type": 4, "data": edit.body}
+
+    return send

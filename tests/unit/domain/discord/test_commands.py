@@ -3,15 +3,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from wgm.db.models import Event, Signup, SignupStatus
-from wgm.domain.discord.commands import (
-    SUBCOMMANDS,
-    event_post,
-    selected,
-    tally,
-    wgm_command,
-    when,
-)
+from wgm.domain.discord.commands import SUBCOMMANDS, selected, wgm_command
 from wgm.domain.discord.schemas import InteractionOption
 from wgm.domain.events.services import EventInputError, parse_start
 
@@ -23,9 +15,15 @@ def test_wgm_groups_event_subcommands() -> None:
     command = wgm_command()
     top = {option["name"]: option for option in command["options"]}
 
-    assert set(top) == {"help", "setup", "event"}
+    assert set(top) == {"help", "setup", "event", "config"}
     assert top["event"]["type"] == 2
-    assert [o["name"] for o in top["event"]["options"]] == ["create", "list"]
+    assert [o["name"] for o in top["event"]["options"]] == [
+        "create",
+        "list",
+        "channel",
+        "settings",
+    ]
+    assert [o["name"] for o in top["config"]["options"]] == ["show"]
 
 
 def test_event_create_offers_the_event_types() -> None:
@@ -76,22 +74,3 @@ def test_malformed_dates_and_times(day: str, clock: str) -> None:
 def test_past_times_are_refused() -> None:
     with pytest.raises(EventInputError, match="already passed"):
         parse_start("2026-11-01", "20:00", EASTERN, NOW)
-
-
-def test_event_post_shows_local_time_and_counts() -> None:
-    starts = datetime(2026, 12, 6, 1, 0, tzinfo=UTC)
-    event = Event(
-        guild_id="1",
-        title="Siege night",
-        event_type="Siege",
-        starts_at=starts,
-        created_by="42",
-    )
-    event.signups.append(
-        Signup(user_id="7", character_name="K", status=SignupStatus.TENTATIVE)
-    )
-    seconds = int(starts.timestamp())
-
-    assert when(starts) == f"<t:{seconds}:F> (<t:{seconds}:R>)"
-    assert tally(event) == "Attending 0 · Tentative 1 · Not attending 0"
-    assert event_post(event).startswith("**Siege night** · Siege\n<t:")

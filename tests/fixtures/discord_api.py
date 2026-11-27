@@ -24,7 +24,8 @@ class Request:
 class FakeDiscordApi:
     """Records requests; answers from `responses` keyed by "METHOD path".
 
-    Without a matching response it echoes the request body with status 200.
+    Without a matching response it echoes the request body with status 200
+    (posting a message answers with a message ID).
     """
 
     url: str = ""
@@ -49,9 +50,10 @@ def discord_api() -> Iterator[FakeDiscordApi]:
                     body,
                 )
             )
-            status, reply = api.responses.get(
-                f"{self.command} {self.path}", (200, body or {})
-            )
+            default = (200, body or {})
+            if self.command == "POST" and self.path.endswith("/messages"):
+                default = (200, {"id": "5550001"})
+            status, reply = api.responses.get(f"{self.command} {self.path}", default)
             payload = json.dumps(reply).encode()
             self.send_response(status)
             self.send_header("Content-Type", "application/json")

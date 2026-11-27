@@ -1,13 +1,14 @@
 """Event rules and storage."""
 
 from datetime import UTC, date, datetime, time
+from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from advanced_alchemy.repository import SQLAlchemyAsyncRepository
 from advanced_alchemy.service import SQLAlchemyAsyncRepositoryService
 from sqlalchemy import select
 
-from wgm.db.models import Event, SignupStatus
+from wgm.db.models import Event, GuildSettings, Signup, SignupStatus
 
 EVENT_TYPES = (
     "Siege",
@@ -50,14 +51,6 @@ def parse_start(day: str, clock: str, zone: ZoneInfo, now: datetime) -> datetime
     return starts_at
 
 
-def counts(event: Event) -> dict[SignupStatus, int]:
-    """How many members gave each answer."""
-    totals = dict.fromkeys(SignupStatus, 0)
-    for signup in event.signups:
-        totals[signup.status] += 1
-    return totals
-
-
 class EventService(SQLAlchemyAsyncRepositoryService[Event]):
     """Stores and finds events."""
 
@@ -80,3 +73,54 @@ class EventService(SQLAlchemyAsyncRepositoryService[Event]):
             .order_by(Event.starts_at)
         )
         return list(await self.repository.get_many(statement=statement))
+
+    async def answer(
+        self,
+        event: Event,
+        *,
+        user_id: str,
+        name: str,
+        status: SignupStatus,
+        role: str | None,
+    ) -> Event:
+        """Record a member's answer. Giving the same answer again removes it."""
+        current = next((s for s in event.signups if s.user_id == user_id), None)
+        if current is None:
+            event.signups.append(
+                Signup(user_id=user_id, character_name=name, status=status, role=role)
+            )
+        elif (current.status, current.role) == (status, role):
+            event.signups.remove(current)
+        else:
+            current.status, current.role, current.character_name = status, role, name
+        return await self.update(event)
+
+    async def find(self, event_id: UUID) -> Event | None:
+        """An event by ID, with its sign ups."""
+        return await self.get_one_or_none(id=event_id)
+
+
+class GuildSettingsService(SQLAlchemyAsyncRepositoryService[GuildSettings]):
+    """Stores per-server settings."""
+
+    class Repo(SQLAlchemyAsyncRepository[GuildSettings]):
+        """Guild settings data access."""
+
+        model_type = GuildSettings
+
+    repository_type = Repo
+
+    async def for_guild(self, guild_id: str) -> GuildSettings:
+        """A server's settings, with defaults if never changed."""
+        found = await self.get_one_or_none(guild_id=guild_id)
+        return found or GuildSettings(guild_id=guild_id)
+
+    async def set_event_channel(self, guild_id: str, channel_id: str) -> GuildSettings:
+        """Choose where event posts go."""
+        settings = await self.get_one_or_none(guild_id=guild_id)
+        if settings is None:
+            return await self.create(
+                GuildSettings(guild_id=guild_id, event_channel_id=channel_id)
+            )
+        settings.event_channel_id = channel_id
+        return await self.update(settings)

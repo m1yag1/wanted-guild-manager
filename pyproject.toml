@@ -44,6 +44,8 @@ template = "madr"
 default_status = "proposed"
 
 [tool.coverage.run]
+# SQLAlchemy's async layer switches greenlets; trace them all.
+concurrency = ["greenlet", "thread"]
 # Alembic loads migrations itself; tests check them by running them.
 omit = ["src/wgm/db/migrations/*"]
 
