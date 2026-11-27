@@ -6,9 +6,9 @@ directory when one exists. See `.env.example` for the full list.
 
 import os
 from collections.abc import Mapping
-from dataclasses import dataclass
 from pathlib import Path
 
+from attrs import frozen
 from dotenv import dotenv_values
 
 
@@ -27,7 +27,7 @@ def _require(env: Mapping[str, str], name: str) -> str:
     return value
 
 
-@dataclass(frozen=True, slots=True)
+@frozen
 class DiscordSettings:
     """Settings for one Discord application."""
 
@@ -35,7 +35,7 @@ class DiscordSettings:
     """Hex-encoded Ed25519 key that Discord signs interactions with."""
 
 
-@dataclass(frozen=True, slots=True)
+@frozen
 class Settings:
     """All application settings."""
 

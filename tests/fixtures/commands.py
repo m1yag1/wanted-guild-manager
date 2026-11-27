@@ -4,11 +4,11 @@ import json
 import stat
 import sys
 from collections.abc import Callable
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import pytest
+from attrs import frozen
 
 SCRIPT = """#!{python}
 import json, os, pathlib, sys
@@ -32,7 +32,7 @@ sys.exit(reply.get("code", 0))
 Rule = tuple[str, dict[str, Any]]
 
 
-@dataclass(frozen=True, slots=True)
+@frozen
 class FakeCommand:
     """A fake executable on disk and the calls made to it."""
 

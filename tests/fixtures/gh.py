@@ -4,11 +4,11 @@ import json
 import stat
 import sys
 from collections.abc import Callable
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import pytest
+from attrs import frozen
 
 SCRIPT = """#!{python}
 import json, sys
@@ -28,7 +28,7 @@ sys.exit(reply.get("code", 0))
 """
 
 
-@dataclass(frozen=True, slots=True)
+@frozen
 class FakeGh:
     """A fake gh on disk and the calls made to it."""
 

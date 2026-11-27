@@ -1,8 +1,10 @@
 """Droplet and environment settings from `deploy/droplet.toml`."""
 
 import tomllib
-from dataclasses import dataclass
 from pathlib import Path
+
+from attrs import field, frozen
+from attrs.validators import and_, ge, instance_of, le
 
 ROOT = Path(__file__).parents[1]
 DEPLOY_DIR = ROOT / "deploy"
@@ -10,13 +12,13 @@ ANSIBLE_DIR = DEPLOY_DIR / "ansible"
 CONFIG_FILE = DEPLOY_DIR / "droplet.toml"
 
 
-@dataclass(frozen=True, slots=True)
+@frozen
 class Environment:
     """One deployed copy of the app, such as staging."""
 
     name: str
     subdomain: str
-    port: int
+    port: int = field(validator=and_(instance_of(int), ge(1), le(65535)))
 
     def hostname(self, ip: str) -> str:
         """The sslip.io hostname for `ip`, such as staging.1-2-3-4.sslip.io."""
@@ -24,7 +26,11 @@ class Environment:
         return f"{self.subdomain}.{base}" if self.subdomain else base
 
 
-@dataclass(frozen=True, slots=True)
+def _expand(path: str | Path) -> Path:
+    return Path(path).expanduser()
+
+
+@frozen
 class DropletConfig:
     """How the droplet is created and reached."""
 
@@ -34,8 +40,8 @@ class DropletConfig:
     size: str
     image: str
     ssh_key_name: str
-    ssh_key_path: Path
-    known_hosts: Path
+    ssh_key_path: Path = field(converter=_expand)
+    known_hosts: Path = field(converter=_expand)
     user: str
     uv_version: str
     python_version: str
@@ -43,21 +49,10 @@ class DropletConfig:
 
     @classmethod
     def load(cls, path: Path = CONFIG_FILE) -> "DropletConfig":
-        """Read the settings file."""
+        """Read the settings file. Unknown or missing keys are an error."""
         data = tomllib.loads(path.read_text())
-        droplet = data["droplet"]
         return cls(
-            name=droplet["name"],
-            tag=droplet["tag"],
-            region=droplet["region"],
-            size=droplet["size"],
-            image=droplet["image"],
-            ssh_key_name=droplet["ssh_key_name"],
-            ssh_key_path=Path(droplet["ssh_key_path"]).expanduser(),
-            known_hosts=Path(droplet["known_hosts"]).expanduser(),
-            user=droplet["user"],
-            uv_version=droplet["uv_version"],
-            python_version=droplet["python_version"],
+            **data["droplet"],
             environments={
                 name: Environment(
                     name=name, subdomain=env["subdomain"], port=env["port"]
