@@ -1,10 +1,19 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from wgm.db.models import Event, Signup, SignupStatus
-from wgm.domain.events.roster import buttons, event_post, roster, tally, when
+from wgm.domain.events.roster import (
+    buttons,
+    closing_line,
+    event_post,
+    roster,
+    tally,
+    when,
+)
 
 STARTS = datetime(2026, 12, 6, 1, 0, tzinfo=UTC)
+CLOSES = STARTS - timedelta(minutes=30)
+BEFORE = CLOSES - timedelta(hours=1)
 
 
 def _event() -> Event:
@@ -14,6 +23,7 @@ def _event() -> Event:
         title="Siege night",
         event_type="Siege",
         starts_at=STARTS,
+        closes_at=CLOSES,
         created_by="42",
     )
     for user, name, status, role in [
@@ -51,15 +61,16 @@ def test_roster_groups_like_the_signup_sheet() -> None:
 
 
 def test_post_has_heading_then_roster() -> None:
-    post = event_post(_event())
+    post = event_post(_event(), BEFORE)
 
     assert post.startswith("**Siege night** · Siege\n<t:")
+    assert f"\nSign-ups close <t:{int(CLOSES.timestamp())}:R>\n\n" in post
     assert "\n\n**Attending (3)**" in post
 
 
 def test_buttons_carry_the_event_and_choice() -> None:
     event = _event()
-    row = buttons(event)[0]["components"]
+    row = buttons(event, BEFORE)[0]["components"]
 
     assert [b["label"] for b in row] == [
         "Tank",
@@ -70,3 +81,22 @@ def test_buttons_carry_the_event_and_choice() -> None:
     ]
     assert row[0]["custom_id"] == f"signup:{event.id}:tank"
     assert row[-1]["style"] == 4
+    assert not any(b["disabled"] for b in row)
+
+
+def test_closed_posts_say_so_and_grey_out_the_buttons() -> None:
+    event = _event()
+
+    row = buttons(event, CLOSES)[0]["components"]
+
+    assert closing_line(event, CLOSES).startswith("Sign-ups closed <t:")
+    assert all(b["disabled"] for b in row)
+
+
+def test_events_from_before_closing_existed_close_at_the_start() -> None:
+    event = _event()
+    event.closes_at = None
+
+    assert closing_line(event, CLOSES) == (
+        f"Sign-ups close <t:{int(STARTS.timestamp())}:R>"
+    )

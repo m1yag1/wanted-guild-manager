@@ -21,12 +21,20 @@ from wgm.domain.discord.schemas import (
     MessageData,
     MessageFlags,
 )
-from wgm.domain.events.roster import buttons, event_post, heading, tally
+from wgm.domain.events.roster import (
+    buttons,
+    closing_line,
+    event_post,
+    heading,
+    tally,
+)
 from wgm.domain.events.services import (
     EVENT_TYPES,
+    MAX_CLOSE_MINUTES,
     EventInputError,
     EventService,
     GuildSettingsService,
+    closing_time,
     parse_start,
 )
 from wgm.lib.settings import Settings
@@ -34,6 +42,7 @@ from wgm.lib.settings import Settings
 SUB_COMMAND = 1
 SUB_COMMAND_GROUP = 2
 STRING = 3
+INTEGER = 4
 CHANNEL = 7
 TEXT_CHANNEL = 0
 
@@ -45,6 +54,17 @@ def _text(name: str, description: str, **extra: Any) -> dict[str, Any]:
         "description": description,
         "required": True,
         **extra,
+    }
+
+
+def _minutes(name: str, description: str, *, required: bool) -> dict[str, Any]:
+    return {
+        "type": INTEGER,
+        "name": name,
+        "description": description,
+        "required": required,
+        "min_value": 0,
+        "max_value": MAX_CLOSE_MINUTES,
     }
 
 
@@ -82,6 +102,11 @@ SUBCOMMANDS = (
             ),
             _text("date", "Day, like 2026-12-05"),
             _text("time", "24-hour start time in the guild's time zone, like 20:00"),
+            _minutes(
+                "close",
+                "Minutes before the start that sign-ups close (default: server's)",
+                required=False,
+            ),
         ],
     ),
     Subcommand(("event", "list"), "List upcoming events"),
@@ -98,6 +123,12 @@ SUBCOMMANDS = (
                 "channel_types": [TEXT_CHANNEL],
             }
         ],
+    ),
+    Subcommand(
+        ("event", "close-time"),
+        "Choose how long before the start sign-ups close",
+        (ADMIN_ROLE,),
+        [_minutes("minutes", "Minutes before the start, such as 30", required=True)],
     ),
     Subcommand(("event", "settings"), "Show the event settings", (ADMIN_ROLE,)),
     Subcommand(("config", "show"), "Show server-wide settings", (ADMIN_ROLE,)),
@@ -243,10 +274,13 @@ async def _setup(ctx: CommandContext, values: dict[str, Any]) -> InteractionResp
 async def _event_create(
     ctx: CommandContext, values: dict[str, Any]
 ) -> InteractionResponse:
+    guild = await ctx.guilds.for_guild(ctx.guild_id)
     try:
         starts_at = parse_start(
             str(values["date"]), str(values["time"]), ctx.settings.timezone, ctx.now
         )
+        minutes = int(values.get("close", guild.close_minutes))
+        closes_at = closing_time(starts_at, minutes, ctx.now)
     except EventInputError as error:
         return private_reply(str(error))
     event = await ctx.events.create(
@@ -255,15 +289,15 @@ async def _event_create(
             title=str(values["title"]).strip(),
             event_type=str(values["type"]),
             starts_at=starts_at,
+            closes_at=closes_at,
             created_by=ctx.user_id,
             channel_id=ctx.interaction.channel_id,
         )
     )
-    configured = (await ctx.guilds.for_guild(ctx.guild_id)).event_channel_id
-    channel_id = configured or ctx.interaction.channel_id or ""
+    channel_id = guild.event_channel_id or ctx.interaction.channel_id or ""
     try:
         message_id = await ctx.discord.post_message(
-            channel_id, event_post(event), buttons(event)
+            channel_id, event_post(event, ctx.now), buttons(event, ctx.now)
         )
     except DiscordApiError:
         await ctx.events.delete(event.id)
@@ -281,7 +315,10 @@ async def _event_list(
     ctx: CommandContext, values: dict[str, Any]
 ) -> InteractionResponse:
     events = await ctx.events.upcoming(ctx.guild_id, ctx.now)
-    posts = [f"{heading(event)}\n{tally(event)}" for event in events]
+    posts = [
+        f"{heading(event)}\n{closing_line(event, ctx.now)}\n{tally(event)}"
+        for event in events
+    ]
     return private_reply("\n\n".join(posts) or "No upcoming events.")
 
 
@@ -301,6 +338,25 @@ async def _event_channel(
     )
 
 
+async def _event_close_time(
+    ctx: CommandContext, values: dict[str, Any]
+) -> InteractionResponse:
+    minutes = int(values["minutes"])
+    await ctx.guilds.set_close_minutes(ctx.guild_id, minutes)
+    return private_reply(
+        f"Sign-ups for new events will close {_before(minutes)}. "
+        "Events already posted keep their closing time."
+    )
+
+
+def _before(minutes: int) -> str:
+    """30 -> "30 minutes before the start"; 0 -> "at the start"."""
+    if minutes == 0:
+        return "at the start"
+    unit = "minute" if minutes == 1 else "minutes"
+    return f"{minutes} {unit} before the start"
+
+
 async def _event_settings(
     ctx: CommandContext, values: dict[str, Any]
 ) -> InteractionResponse:
@@ -314,6 +370,7 @@ async def _event_settings(
         details = f"\n\n{warning}{check.report()}"
     return private_reply(
         f"**Event settings**\nChannel: {channel}\n"
+        f"Sign-ups close: {_before(settings.close_minutes)}\n"
         f"Times are entered in: {ctx.settings.timezone}{details}"
     )
 
@@ -337,6 +394,7 @@ HANDLERS = {
     ("event", "create"): _event_create,
     ("event", "list"): _event_list,
     ("event", "channel"): _event_channel,
+    ("event", "close-time"): _event_close_time,
     ("event", "settings"): _event_settings,
     ("config", "show"): _config_show,
 }

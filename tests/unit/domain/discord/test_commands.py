@@ -21,6 +21,7 @@ def test_wgm_groups_event_subcommands() -> None:
         "create",
         "list",
         "channel",
+        "close-time",
         "settings",
     ]
     assert [o["name"] for o in top["config"]["options"]] == ["show"]
