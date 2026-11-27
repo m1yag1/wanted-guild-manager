@@ -56,7 +56,7 @@ def test_applies_repo_settings_and_skips_the_paid_ruleset(
         ["PATCH", f"{REPO}/labels/automerge"],
         ["GET", f"{REPO}/rulesets"],
     ]
-    sent = json.loads(calls[0]["stdin"])
+    sent = json.loads(calls[0]["body"])
     assert sent["allow_rebase_merge"] is True
     assert sent["allow_merge_commit"] is False
     assert "security" not in sent
@@ -71,7 +71,7 @@ def test_creates_the_ruleset_when_missing(fake_gh: MakeFakeGh) -> None:
 
     last = gh.calls()[-1]
     assert last["args"][2:4] == ["POST", f"{REPO}/rulesets"]
-    assert json.loads(last["stdin"])["name"] == "protect-main"
+    assert json.loads(last["body"])["name"] == "protect-main"
     assert messages == ["Created the protect-main ruleset."]
 
 
@@ -186,7 +186,7 @@ def test_creates_a_missing_label(fake_gh: MakeFakeGh) -> None:
 
     last = gh.calls()[-1]
     assert last["args"][2:4] == ["POST", f"{REPO}/labels"]
-    assert json.loads(last["stdin"]) == LABEL
+    assert json.loads(last["body"]) == LABEL
     assert messages == ["Created the automerge label."]
 
 

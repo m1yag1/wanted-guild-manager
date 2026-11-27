@@ -2,6 +2,7 @@
 
 import json
 import re
+import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass
 from http import HTTPStatus
@@ -53,16 +54,17 @@ class GhCli:
             GhError: `gh` exited with an error, with the HTTP status if known.
         """
         args = [self.executable, "api", "--method", method, path]
-        if body is not None:
-            args += ["--input", "-"]
-        try:
-            output = self.shell.run(
-                args, stdin=None if body is None else json.dumps(body)
-            )
-        except CommandError as error:
-            match = re.search(r"\(HTTP (\d+)\)", error.stderr)
-            status = int(match.group(1)) if match else None
-            raise GhError(status, error.stderr.strip()) from None
+        with tempfile.TemporaryDirectory() as tmp:
+            if body is not None:
+                body_file = Path(tmp) / "body.json"
+                body_file.write_text(json.dumps(body))
+                args += ["--input", str(body_file)]
+            try:
+                output = self.shell.run(args)
+            except CommandError as error:
+                match = re.search(r"\(HTTP (\d+)\)", error.stderr)
+                status = int(match.group(1)) if match else None
+                raise GhError(status, error.stderr.strip()) from None
         return json.loads(output) if output.strip() else None
 
 

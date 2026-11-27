@@ -7,7 +7,6 @@ exit code and stderr for a clear message.
 """
 
 import functools
-import io
 import shlex
 from collections.abc import Mapping, Sequence
 
@@ -32,14 +31,11 @@ class Shell:
     context: Context
     env: Mapping[str, str] = field(factory=dict)
 
-    def run(
-        self, args: Sequence[str], *, stdin: str | None = None, capture: bool = True
-    ) -> str:
+    def run(self, args: Sequence[str], *, capture: bool = True) -> str:
         """Run a command and return its output.
 
         Args:
             args: The command and its arguments.
-            stdin: Text to send to the command's standard input.
             capture: Return the output instead of showing it as it runs.
 
         Returns:
@@ -54,7 +50,9 @@ class Shell:
             hide=capture,
             warn=True,
             env=dict(self.env),
-            in_stream=False if stdin is None else io.StringIO(stdin),
+            # No stdin: invoke feeds a non-terminal stream one byte every 10 ms,
+            # so pass larger input as a file argument instead.
+            in_stream=False,
         )
         if not result.ok:
             raise CommandError(args, result.exited, result.stderr)

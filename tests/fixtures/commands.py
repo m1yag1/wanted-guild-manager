@@ -17,7 +17,6 @@ args = sys.argv[1:]
 call = {{
     "args": args,
     "env": {{k: os.environ.get(k) for k in {env_keys!r}}},
-    "stdin": sys.stdin.read() if "--input" in args else None,
 }}
 with open({log!r}, "a") as log:
     log.write(json.dumps(call) + "\\n")
@@ -41,7 +40,7 @@ class FakeCommand:
     log: Path
 
     def calls(self) -> list[dict[str, Any]]:
-        """Every call so far, as `{"args": [...], "env": {...}, "stdin": ...}`."""
+        """Every call so far, as `{"args": [...], "env": {...}}`."""
         if not self.log.exists():
             return []
         return [json.loads(line) for line in self.log.read_text().splitlines()]
