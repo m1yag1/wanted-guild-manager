@@ -3,7 +3,7 @@
 See https://discord.com/developers/docs/interactions/receiving-and-responding
 """
 
-from enum import IntEnum
+from enum import IntEnum, IntFlag
 
 import msgspec
 
@@ -25,6 +25,29 @@ class InteractionResponseType(IntEnum):
     CHANNEL_MESSAGE_WITH_SOURCE = 4
 
 
+class MessageFlags(IntFlag):
+    """Message flags we use."""
+
+    EPHEMERAL = 64
+    """Only the person who ran the command sees the reply."""
+
+
+class InteractionOption(msgspec.Struct):
+    """A chosen subcommand or option value."""
+
+    name: str
+    type: int
+    options: list["InteractionOption"] = []
+
+
+class InteractionData(msgspec.Struct):
+    """What was used: a command (name, options) or a button (custom_id)."""
+
+    name: str = ""
+    options: list[InteractionOption] = []
+    custom_id: str = ""
+
+
 class Interaction(msgspec.Struct):
     """An incoming interaction. Unknown fields are ignored."""
 
@@ -33,9 +56,18 @@ class Interaction(msgspec.Struct):
     type: InteractionType
     token: str
     version: int
+    data: InteractionData | None = None
+
+
+class MessageData(msgspec.Struct, omit_defaults=True):
+    """The message we reply with."""
+
+    content: str
+    flags: MessageFlags = MessageFlags(0)
 
 
 class InteractionResponse(msgspec.Struct, omit_defaults=True):
     """Our answer to an interaction."""
 
     type: InteractionResponseType
+    data: MessageData | None = None

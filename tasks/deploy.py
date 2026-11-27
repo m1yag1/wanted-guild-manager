@@ -9,9 +9,11 @@ from invoke.context import Context
 from invoke.tasks import task
 
 from tasks.config import CONFIG_FILE, ROOT, DropletConfig, Environment
+from tasks.discord import API_URL, DiscordRest, interactions_url
 from tasks.droplet import INVENTORY, Ansible, ansible_shell, read_ip
 from tasks.errors import friendly_errors
 from tasks.shell import Shell, say
+from wgm.lib.settings import load_settings
 
 BUILD_DIR = ROOT / "dist" / "release"
 KEEP_RELEASES = 5
@@ -108,6 +110,7 @@ HELP = {
         "git": "Path to git.",
         "secrets": "Secrets file to install (default .env.<env>).",
         "build_dir": "Where to build the wheel (default dist/release).",
+        "api_url": "Discord API base URL.",
     },
 )
 @friendly_errors
@@ -121,6 +124,7 @@ def release_task(
     inventory: str = str(INVENTORY),
     secrets: str = "",
     build_dir: str = str(BUILD_DIR),
+    api_url: str = API_URL,
 ) -> None:
     """Build the app and deploy it as a new release."""
     config = DropletConfig.load(Path(config_file))
@@ -135,6 +139,20 @@ def release_task(
         user=config.user,
         extra_vars=deploy_vars(config, environment, ip, built, secrets_file),
     )
+    point_discord_here(config, env, ip, secrets_file, api_url)
+
+
+def point_discord_here(
+    config: DropletConfig, env: str, ip: str, secrets_file: Path, api_url: str
+) -> None:
+    """Set the Discord app's endpoint URL, which changes with each new droplet."""
+    discord = load_settings(environ={}, env_file=secrets_file).discord
+    if not discord.bot_token:
+        say(f"Skipped the Discord endpoint: no bot token in {secrets_file.name}.")
+        return
+    url = interactions_url(config, env, ip)
+    DiscordRest(discord.bot_token, api_url).set_interactions_endpoint(url)
+    say(f"Discord now sends interactions to {url}")
 
 
 @task(name="rollback", help=HELP)

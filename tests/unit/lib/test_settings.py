@@ -51,3 +51,24 @@ def test_ignores_empty_entries_in_the_env_file(tmp_path: Path) -> None:
 
     with pytest.raises(MissingSettingError, match=KEY):
         load_settings(environ={}, env_file=env_file)
+
+
+def test_reads_the_optional_discord_values() -> None:
+    settings = Settings.from_env(
+        {
+            KEY: "abc",
+            "WGM_DISCORD_APPLICATION_ID": "123",
+            "WGM_DISCORD_BOT_TOKEN": " token ",
+            "WGM_DISCORD_GUILD_ID": "456",
+        }
+    )
+
+    assert settings.discord.application_id == "123"
+    assert settings.discord.bot_token == "token"
+    assert settings.discord.guild_id == "456"
+
+
+def test_optional_discord_values_default_to_empty() -> None:
+    settings = Settings.from_env({KEY: "abc"})
+
+    assert settings.discord.bot_token == ""

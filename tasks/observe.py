@@ -6,9 +6,17 @@ from invoke.context import Context
 from invoke.tasks import task
 
 from tasks.config import CONFIG_FILE, DropletConfig, Environment
+from tasks.discord import (
+    API_URL,
+    DiscordRest,
+    endpoint_report,
+    interactions_url,
+    secrets_file,
+)
 from tasks.droplet import INVENTORY, read_ip, ssh_options
 from tasks.errors import friendly_errors
 from tasks.shell import Shell, say
+from wgm.lib.settings import load_settings
 
 
 def ssh_command(
@@ -92,7 +100,14 @@ def logs_task(
     )
 
 
-@task(name="status", help=HELP)
+@task(
+    name="status",
+    help=HELP
+    | {
+        "secrets": "Secrets file (default .env.<env>).",
+        "api_url": "Discord API base URL.",
+    },
+)
 @friendly_errors
 def status_task(
     c: Context,
@@ -100,9 +115,21 @@ def status_task(
     ssh: str = "ssh",
     config_file: str = str(CONFIG_FILE),
     inventory: str = str(INVENTORY),
+    secrets: str = "",
+    api_url: str = API_URL,
 ) -> None:
-    """Show an environment's service state, version, health check and certificate."""
+    """Show an environment's service, version, health, certificate and Discord link."""
     config = DropletConfig.load(Path(config_file))
     environment = config.environment(env)
     ip = read_ip(Path(inventory))
-    say(Shell(c).run(ssh_command(config, ip, status_command(environment, ip), ssh)))
+    say(
+        Shell(c)
+        .run(ssh_command(config, ip, status_command(environment, ip), ssh))
+        .rstrip()
+    )
+    discord = load_settings(environ={}, env_file=secrets_file(env, secrets)).discord
+    if not discord.bot_token:
+        say("discord endpoint: not checked (no bot token)")
+        return
+    rest = DiscordRest(discord.bot_token, api_url)
+    say(endpoint_report(rest, interactions_url(config, env, ip)))

@@ -12,6 +12,7 @@ from tasks.observe import (
     status_task,
 )
 from tests.fixtures.commands import MakeFakeCommand
+from tests.fixtures.discord_api import FakeDiscordApi
 from tests.fixtures.droplet import IP
 
 
@@ -80,17 +81,51 @@ def test_logs_task(
 
 def test_status_task_prints_the_report(
     fake_command: MakeFakeCommand,
+    discord_api: FakeDiscordApi,
     config_file: Path,
     written_inventory: Path,
+    tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     ssh = fake_command("ssh", [("systemctl", {"stdout": "service: active\n"})])
+    secrets = tmp_path / ".env.staging"
+    secrets.write_text("WGM_DISCORD_PUBLIC_KEY=abc\nWGM_DISCORD_BOT_TOKEN=t\n")
+    discord_api.responses["GET /applications/@me"] = (
+        200,
+        {"interactions_endpoint_url": None},
+    )
 
     status_task(
         Context(),
         ssh=str(ssh.path),
         config_file=str(config_file),
         inventory=str(written_inventory),
+        secrets=str(secrets),
+        api_url=discord_api.url,
     )
 
-    assert "service: active" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "service: active" in out
+    assert "discord endpoint: not set" in out
+
+
+def test_status_task_without_a_bot_token(
+    fake_command: MakeFakeCommand,
+    config_file: Path,
+    written_inventory: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    ssh = fake_command("ssh")
+    secrets = tmp_path / ".env.staging"
+    secrets.write_text("WGM_DISCORD_PUBLIC_KEY=abc\n")
+
+    status_task(
+        Context(),
+        ssh=str(ssh.path),
+        config_file=str(config_file),
+        inventory=str(written_inventory),
+        secrets=str(secrets),
+    )
+
+    assert "not checked" in capsys.readouterr().out
