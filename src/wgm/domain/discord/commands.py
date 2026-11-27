@@ -14,7 +14,13 @@ from wgm.domain.discord.context import (
 )
 from wgm.domain.discord.options import SUB_COMMAND, SUB_COMMAND_GROUP
 from wgm.domain.discord.permissions import ADMIN_ROLE, WGM_ROLES, may_run
-from wgm.domain.discord.schemas import InteractionOption, InteractionResponse
+from wgm.domain.discord.schemas import (
+    AutocompleteResponse,
+    Choice,
+    ChoicesData,
+    InteractionOption,
+    InteractionResponse,
+)
 from wgm.plugins import Plugins
 
 
@@ -98,15 +104,22 @@ def wgm_command(plugins: Plugins) -> dict[str, Any]:
     }
 
 
-def selected(
+def _leaf(
     options: list[InteractionOption],
-) -> tuple[tuple[str, ...], dict[str, Any]]:
-    """The chosen subcommand path and its option values."""
+) -> tuple[tuple[str, ...], list[InteractionOption]]:
     path: list[str] = []
     while options and options[0].type in (SUB_COMMAND, SUB_COMMAND_GROUP):
         path.append(options[0].name)
         options = options[0].options
-    return tuple(path), {option.name: option.value for option in options}
+    return tuple(path), options
+
+
+def selected(
+    options: list[InteractionOption],
+) -> tuple[tuple[str, ...], dict[str, Any]]:
+    """The chosen subcommand path and its option values."""
+    path, leaf = _leaf(options)
+    return path, {option.name: option.value for option in leaf}
 
 
 async def _role_ids(ctx: CommandContext) -> dict[str, str]:
@@ -149,6 +162,24 @@ async def run_command(ctx: CommandContext) -> InteractionResponse:
         roles = " or ".join(sub.allowed_roles)
         return private_reply(f"You need the {roles} role to use `{sub.usage}`.")
     return await sub.handler(ctx, values)
+
+
+MAX_CHOICES = 25
+"""Discord shows at most 25 suggestions."""
+
+
+async def suggest(ctx: CommandContext) -> AutocompleteResponse:
+    """Suggestions for the option a member is typing, such as which event."""
+    data = ctx.interaction.data
+    path, leaf = _leaf(data.options if data else [])
+    sub = {sub.path: sub for sub in all_subcommands(ctx.plugins)}.get(path)
+    focused = next((option for option in leaf if option.focused), None)
+    pairs: list[tuple[str, str]] = []
+    if sub and sub.suggest and focused and ctx.interaction.guild_id:
+        pairs = await sub.suggest(ctx, focused.name, str(focused.value or ""))
+    return AutocompleteResponse(
+        ChoicesData([Choice(name[:100], value) for name, value in pairs[:MAX_CHOICES]])
+    )
 
 
 async def press_button(ctx: CommandContext) -> InteractionResponse:

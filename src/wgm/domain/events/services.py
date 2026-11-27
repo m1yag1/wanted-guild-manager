@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 
 from advanced_alchemy.repository import SQLAlchemyAsyncRepository
 from advanced_alchemy.service import SQLAlchemyAsyncRepositoryService
+from attrs import frozen
 from sqlalchemy import func, select
 
 from wgm.db.models import (
@@ -75,6 +76,47 @@ def closing_time(starts_at: datetime, minutes: int, now: datetime) -> datetime:
     return closes_at
 
 
+@frozen
+class NewTimes:
+    """What an edit changes about when an event happens. None keeps it."""
+
+    day: str | None = None
+    clock: str | None = None
+    close: int | None = None
+    """Minutes before the start that sign-ups close."""
+
+
+def reschedule(event: Event, new: NewTimes, zone: ZoneInfo, now: datetime) -> None:
+    """Move an event's start and close times. Missing parts stay as they are.
+
+    Moving the start keeps the same gap before sign-ups close unless `close`
+    gives a new one. Sign-ups that are still open must stay open. Sign-ups that
+    already closed may stay closed, or reopen when the close moves later.
+
+    Raises:
+        EventInputError: The new times are malformed, already passed, or would
+            close sign-ups that are open now.
+    """
+    local = event.starts_at.astimezone(zone)
+    starts_at = event.starts_at
+    if new.day is not None or new.clock is not None:
+        starts_at = parse_start(
+            new.day or local.date().isoformat(),
+            new.clock or f"{local:%H:%M}",
+            zone,
+            now,
+        )
+    gap = event.starts_at - (event.closes_at or event.starts_at)
+    minutes = new.close if new.close is not None else int(gap.total_seconds() // 60)
+    closes_at = starts_at - timedelta(minutes=minutes)
+    was_open = now < (event.closes_at or event.starts_at)
+    if was_open:
+        closes_at = closing_time(starts_at, minutes, now)
+    event.starts_at, event.closes_at = starts_at, closes_at
+    if closes_at > now:
+        event.closed_post_at = None
+
+
 class EventService(SQLAlchemyAsyncRepositoryService[Event]):
     """Stores and finds events."""
 
@@ -85,17 +127,24 @@ class EventService(SQLAlchemyAsyncRepositoryService[Event]):
 
     repository_type = Repo
 
-    async def upcoming(self, guild_id: str, now: datetime) -> list[Event]:
-        """Events in a server that have not started and are not cancelled."""
+    async def upcoming(
+        self, guild_id: str, now: datetime, *, cancelled: bool = False
+    ) -> list[Event]:
+        """Events in a server that have not started, soonest first.
+
+        Deleted events are never included, and cancelled ones only on request.
+        """
         statement = (
             select(Event)
             .where(
                 Event.guild_id == guild_id,
                 Event.starts_at > now,
-                Event.cancelled_at.is_(None),
+                Event.deleted_at.is_(None),
             )
             .order_by(Event.starts_at)
         )
+        if not cancelled:
+            statement = statement.where(Event.cancelled_at.is_(None))
         return list(await self.repository.get_many(statement=statement))
 
     async def answer(
@@ -120,8 +169,16 @@ class EventService(SQLAlchemyAsyncRepositoryService[Event]):
         return await self.update(event)
 
     async def find(self, event_id: UUID) -> Event | None:
-        """An event by ID, with its sign ups."""
-        return await self.get_one_or_none(id=event_id)
+        """An event by ID, with its sign ups. Deleted events aren't found."""
+        return await self.get_one_or_none(id=event_id, deleted_at=None)
+
+    async def in_guild(self, event_id: str, guild_id: str) -> Event | None:
+        """An event in this server by its ID as text, or None."""
+        try:
+            found = await self.find(UUID(event_id))
+        except ValueError:
+            return None
+        return found if found and found.guild_id == guild_id else None
 
     async def due_to_lock(self, now: datetime) -> list[Event]:
         """Posted events whose sign-ups have closed but whose post still has buttons."""
@@ -130,6 +187,7 @@ class EventService(SQLAlchemyAsyncRepositoryService[Event]):
             Event.closed_post_at.is_(None),
             Event.message_id.is_not(None),
             Event.cancelled_at.is_(None),
+            Event.deleted_at.is_(None),
         )
         return list(await self.repository.get_many(statement=statement))
 

@@ -93,12 +93,18 @@ def roster(event: Event) -> str:
 
 
 def event_post(event: Event, now: datetime) -> str:
-    """The full post: heading and closing time, then the roster underneath."""
-    return f"{heading(event)}\n{closing_line(event, now)}\n\n{roster(event)}"
+    """The full post: heading and closing time (or Cancelled), then the roster."""
+    status = "**Cancelled**" if event.cancelled_at else closing_line(event, now)
+    return f"{heading(event)}\n{status}\n\n{roster(event)}"
 
 
 def buttons(event: Event, now: datetime) -> list[dict[str, Any]]:
-    """One row of sign-up buttons for the post, greyed out once closed."""
+    """One row of sign-up buttons for the post, greyed out once closed.
+
+    A cancelled event has no buttons.
+    """
+    if event.cancelled_at:
+        return []
     closed = is_closed(event, now)
     return [
         {

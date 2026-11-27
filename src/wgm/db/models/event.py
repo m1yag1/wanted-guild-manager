@@ -52,6 +52,14 @@ class Event(UUIDAuditBase):
     cancelled_at: Mapped[datetime | None] = mapped_column(
         DateTimeUTC(timezone=True), default=None
     )
+    """When an admin cancelled it. The post stays up, marked Cancelled."""
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTimeUTC(timezone=True), default=None
+    )
+    """When an admin deleted it. Its post is removed and the event is hidden,
+    but the row and its sign ups are kept."""
+    deleted_by: Mapped[str | None] = mapped_column(String(32), default=None)
+    """Discord user ID of the admin who deleted it."""
 
     signups: Mapped[list["Signup"]] = relationship(
         back_populates="event",

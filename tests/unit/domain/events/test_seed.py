@@ -34,6 +34,14 @@ def _post(api: FakeDiscordApi) -> dict[str, Any]:
     return body
 
 
+def _post_edits(api: FakeDiscordApi) -> list[Any]:
+    return [
+        r.body
+        for r in api.requests
+        if r.method == "PATCH" and r.path.startswith("/channels/")
+    ]
+
+
 def _disabled(post: dict[str, Any]) -> list[bool]:
     return [b["disabled"] for b in post["components"][0]["components"]]
 
@@ -90,3 +98,24 @@ async def test_config_and_help_show_dev_mode_commands(
 
     assert "Plugins: event\n`/wgm event settings`" in shown["data"]["content"]
     assert "`/wgm event seed`: Post a test event" in helped["data"]["content"]
+
+
+@pytest.mark.anyio
+async def test_a_closed_test_event_stays_locked_when_edited_or_reopens_when_moved(
+    interact: Interact, wgm_command: MakeCommand, roles: FakeDiscordApi
+) -> None:
+    await interact(wgm_command("event seed", preset="closed", **ADMIN))
+    post = _post(roles)
+    event_id = post["components"][0]["components"][0]["custom_id"].split(":")[1]
+
+    await interact(wgm_command("event edit", event=event_id, title="Renamed", **ADMIN))
+    renamed = _post_edits(roles)[-1]
+    await interact(
+        wgm_command("event edit", event=event_id, date="2099-12-05", **ADMIN)
+    )
+    moved = _post_edits(roles)[-1]
+
+    assert "Sign-ups closed <t:" in renamed["content"]
+    assert all(_disabled(renamed))
+    assert "Sign-ups close <t:" in moved["content"]
+    assert not any(_disabled(moved))

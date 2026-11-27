@@ -120,6 +120,10 @@ class DiscordClient:
             _message(content, components),
         )
 
+    async def delete_message(self, channel_id: str, message_id: str) -> None:
+        """Remove a message the app posted."""
+        await self._call("DELETE", f"/channels/{channel_id}/messages/{message_id}")
+
     async def edit_original(
         self, application_id: str, token: str, message: dict[str, Any]
     ) -> None:
