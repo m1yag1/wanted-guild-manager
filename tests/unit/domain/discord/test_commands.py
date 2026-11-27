@@ -22,6 +22,9 @@ def test_wgm_groups_event_subcommands() -> None:
     assert top["event"]["type"] == 2
     assert [o["name"] for o in top["event"]["options"]] == [
         "create",
+        "edit",
+        "cancel",
+        "delete",
         "list",
         "channel",
         "close-time",

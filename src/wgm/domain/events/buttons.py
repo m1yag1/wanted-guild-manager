@@ -35,6 +35,8 @@ async def press(ctx: CommandContext) -> InteractionResponse:
     event = await events.find(parsed[0])
     if event is None:
         return private_reply("That event no longer exists.")
+    if event.cancelled_at:
+        return private_reply(f"**{event.title}** was cancelled.")
     if is_closed(event, ctx.now):
         closed_at = int(closes(event).timestamp())
         return private_reply(

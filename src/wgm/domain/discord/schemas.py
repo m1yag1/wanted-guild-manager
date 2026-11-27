@@ -28,6 +28,8 @@ class InteractionResponseType(IntEnum):
     """Shows "thinking..." until we edit the reply in."""
     UPDATE_MESSAGE = 7
     """Edit the message whose button was pressed."""
+    APPLICATION_COMMAND_AUTOCOMPLETE_RESULT = 8
+    """Suggestions for the option being typed."""
 
 
 class MessageFlags(IntFlag):
@@ -44,6 +46,8 @@ class InteractionOption(msgspec.Struct):
     type: int
     value: str | int | float | bool | None = None
     options: list["InteractionOption"] = []
+    focused: bool = False
+    """Set on the option being typed, when asking for suggestions."""
 
 
 class InteractionData(msgspec.Struct):
@@ -110,3 +114,25 @@ class InteractionResponse(msgspec.Struct, omit_defaults=True):
 
     type: InteractionResponseType
     data: MessageData | None = None
+
+
+class Choice(msgspec.Struct):
+    """One suggestion: what the member sees, and the value sent if picked."""
+
+    name: str
+    value: str
+
+
+class ChoicesData(msgspec.Struct):
+    """Up to 25 suggestions."""
+
+    choices: list[Choice]
+
+
+class AutocompleteResponse(msgspec.Struct):
+    """Our answer while a member types an option that has suggestions."""
+
+    data: ChoicesData
+    type: InteractionResponseType = (
+        InteractionResponseType.APPLICATION_COMMAND_AUTOCOMPLETE_RESULT
+    )

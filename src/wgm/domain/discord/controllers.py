@@ -12,11 +12,12 @@ from litestar.status_codes import HTTP_200_OK
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from wgm.domain.discord.client import DiscordClient
-from wgm.domain.discord.commands import press_button
+from wgm.domain.discord.commands import press_button, suggest
 from wgm.domain.discord.context import CommandContext
 from wgm.domain.discord.deferred import finish_command
 from wgm.domain.discord.guards import require_discord_signature
 from wgm.domain.discord.schemas import (
+    AutocompleteResponse,
     Interaction,
     InteractionResponse,
     InteractionResponseType,
@@ -40,7 +41,7 @@ class DiscordController(Controller):
         data: JSONBody[Interaction],
         state: State,
         db_session: NamedDependency[AsyncSession],
-    ) -> Response[InteractionResponse]:
+    ) -> Response[InteractionResponse | AutocompleteResponse]:
         """Answer an interaction.
 
         Discord sends a PING when the endpoint URL is saved, and expects a PONG.
@@ -53,6 +54,7 @@ class DiscordController(Controller):
         if data.type not in (
             InteractionType.APPLICATION_COMMAND,
             InteractionType.MESSAGE_COMPONENT,
+            InteractionType.APPLICATION_COMMAND_AUTOCOMPLETE,
         ):
             raise ClientException(f"Unsupported interaction type: {data.type.name}")
         settings: Settings = state.settings
@@ -80,4 +82,6 @@ class DiscordController(Controller):
             now=datetime.now(UTC),
             plugins=state.plugins,
         )
+        if data.type is InteractionType.APPLICATION_COMMAND_AUTOCOMPLETE:
+            return Response(await suggest(ctx))
         return Response(await press_button(ctx))

@@ -60,6 +60,9 @@ Handler = Callable[[CommandContext, dict[str, Any]], Awaitable[InteractionRespon
 """Answers one subcommand, given its option values."""
 ButtonHandler = Callable[[CommandContext], Awaitable[InteractionResponse]]
 """Answers a button press."""
+Suggest = Callable[[CommandContext, str, str], Awaitable[list[tuple[str, str]]]]
+"""Suggestions for an option, given its name and what was typed so far:
+(what the member sees, the value sent) pairs."""
 
 
 @frozen
@@ -74,6 +77,8 @@ class Subcommand:
     options: list[dict[str, Any]] = field(factory=list)
     server_only: bool = True
     """Only makes sense in a server, not in a direct message."""
+    suggest: Suggest | None = None
+    """Answers options marked `autocomplete` as the member types."""
 
     @property
     def usage(self) -> str:

@@ -1,12 +1,20 @@
 """The `/wgm event ...` subcommands."""
 
+from datetime import datetime
 from typing import Any
 
 from wgm.db.models import Event
 from wgm.domain.discord.channel_check import ChannelCheck, check_channel
 from wgm.domain.discord.client import DiscordApiError
 from wgm.domain.discord.context import CommandContext, Subcommand, private_reply
-from wgm.domain.discord.options import CHANNEL, TEXT_CHANNEL, choice, integer, text
+from wgm.domain.discord.options import (
+    CHANNEL,
+    STRING,
+    TEXT_CHANNEL,
+    choice,
+    integer,
+    text,
+)
 from wgm.domain.discord.permissions import ADMIN_ROLE
 from wgm.domain.discord.schemas import InteractionResponse
 from wgm.domain.events.roster import (
@@ -14,6 +22,7 @@ from wgm.domain.events.roster import (
     closing_line,
     event_post,
     heading,
+    is_closed,
     tally,
 )
 from wgm.domain.events.services import (
@@ -22,8 +31,10 @@ from wgm.domain.events.services import (
     EventInputError,
     EventService,
     GuildSettingsService,
+    NewTimes,
     closing_time,
     parse_start,
+    reschedule,
 )
 
 
@@ -156,6 +167,163 @@ async def _settings(ctx: CommandContext, values: dict[str, Any]) -> InteractionR
     )
 
 
+def _optional(option: dict[str, Any]) -> dict[str, Any]:
+    return {**option, "required": False}
+
+
+EVENT_OPTION = {
+    "type": STRING,
+    "name": "event",
+    "description": "Start typing the event's name",
+    "required": True,
+    "autocomplete": True,
+}
+
+
+async def suggest_events(
+    ctx: CommandContext, option: str, typed: str
+) -> list[tuple[str, str]]:
+    """Upcoming events whose title contains what was typed, soonest first."""
+    return await _suggest(ctx, typed, cancelled=False)
+
+
+async def suggest_any_events(
+    ctx: CommandContext, option: str, typed: str
+) -> list[tuple[str, str]]:
+    """Like `suggest_events`, including cancelled events, which are marked."""
+    return await _suggest(ctx, typed, cancelled=True)
+
+
+async def _suggest(
+    ctx: CommandContext, typed: str, *, cancelled: bool
+) -> list[tuple[str, str]]:
+    zone = ctx.settings.timezone
+    found = await events(ctx).upcoming(ctx.guild_id, ctx.now, cancelled=cancelled)
+    return [
+        (
+            f"{event.title} · {_local(event.starts_at, zone)}"
+            + (" (cancelled)" if event.cancelled_at else ""),
+            str(event.id),
+        )
+        for event in found
+        if typed.strip().lower() in event.title.lower()
+    ]
+
+
+def _local(moment: datetime, zone: Any) -> str:
+    """Sat Dec 5, 8:00 PM in the guild's time zone (suggestions can't use <t:>)."""
+    local = moment.astimezone(zone)
+    return f"{local:%a %b} {local.day}, {local:%I:%M %p}".replace(" 0", " ")
+
+
+async def _upcoming(ctx: CommandContext, values: dict[str, Any]) -> Event | None:
+    event = await events(ctx).in_guild(str(values["event"]), ctx.guild_id)
+    if event is None or event.cancelled_at or event.starts_at <= ctx.now:
+        return None
+    return event
+
+
+NOT_FOUND = "Pick an upcoming event from the list as you type."
+
+
+async def _redraw(ctx: CommandContext, event: Event) -> str:
+    """Update the event's post; say so if the post couldn't be changed."""
+    if is_closed(event, ctx.now) and not event.cancelled_at:
+        event.closed_post_at = event.closed_post_at or ctx.now
+    try:
+        await ctx.discord.edit_message(
+            event.channel_id or "",
+            event.message_id or "",
+            event_post(event, ctx.now),
+            buttons(event, ctx.now),
+        )
+    except DiscordApiError:
+        return (
+            f"\nI couldn't update the post in <#{event.channel_id}>. It may have "
+            "been deleted."
+        )
+    return ""
+
+
+async def _edit(ctx: CommandContext, values: dict[str, Any]) -> InteractionResponse:
+    event = await _upcoming(ctx, values)
+    if event is None:
+        return private_reply(NOT_FOUND)
+    changes = {key: values[key] for key in EDITABLE if key in values}
+    if not changes:
+        return private_reply(
+            "Nothing to change. Pick a new title, type, date, time or close."
+        )
+    try:
+        reschedule(
+            event,
+            NewTimes(
+                day=_text_or_none(changes.get("date")),
+                clock=_text_or_none(changes.get("time")),
+                close=int(changes["close"]) if "close" in changes else None,
+            ),
+            ctx.settings.timezone,
+            ctx.now,
+        )
+    except EventInputError as error:
+        return private_reply(str(error))
+    if "title" in changes:
+        event.title = str(changes["title"]).strip()
+    if "type" in changes:
+        event.event_type = str(changes["type"])
+    problem = await _redraw(ctx, event)
+    await events(ctx).update(event)
+    return private_reply(
+        f"Updated **{event.title}**: {', '.join(changes)}.\n"
+        f"{heading(event)}\n{closing_line(event, ctx.now)}{problem}"
+    )
+
+
+def _text_or_none(value: object) -> str | None:
+    return None if value is None else str(value)
+
+
+EDITABLE = ("title", "type", "date", "time", "close")
+
+
+async def _cancel(ctx: CommandContext, values: dict[str, Any]) -> InteractionResponse:
+    event = await _upcoming(ctx, values)
+    if event is None:
+        return private_reply(NOT_FOUND)
+    event.cancelled_at = ctx.now
+    problem = await _redraw(ctx, event)
+    await events(ctx).update(event)
+    return private_reply(
+        f"Cancelled **{event.title}**. The post now says so and has no buttons."
+        f"{problem}"
+    )
+
+
+async def _delete(ctx: CommandContext, values: dict[str, Any]) -> InteractionResponse:
+    event = await events(ctx).in_guild(str(values["event"]), ctx.guild_id)
+    if event is None:
+        return private_reply(NOT_FOUND)
+    event.deleted_at, event.deleted_by = ctx.now, ctx.user_id
+    await events(ctx).update(event)
+    problem = ""
+    try:
+        await ctx.discord.delete_message(event.channel_id or "", event.message_id or "")
+    except DiscordApiError as error:
+        if error.status != NOT_FOUND_STATUS:
+            problem = (
+                f"\nI couldn't remove its post in <#{event.channel_id}>, so "
+                "you may want to delete it by hand."
+            )
+    return private_reply(
+        f"Deleted **{event.title}** and removed its post. Its sign ups are "
+        f"kept in the database.{problem}"
+    )
+
+
+NOT_FOUND_STATUS = 404
+"""The post was already gone."""
+
+
 async def setup_line(ctx: CommandContext) -> str:
     """What `/wgm setup` says about the event channel."""
     channel_id = (await guilds(ctx).for_guild(ctx.guild_id)).event_channel_id
@@ -181,6 +349,41 @@ SUBCOMMANDS = (
                 required=False,
             ),
         ],
+    ),
+    Subcommand(
+        ("event", "edit"),
+        "Change an upcoming event; its post updates too",
+        _edit,
+        (ADMIN_ROLE,),
+        [
+            EVENT_OPTION,
+            _optional(text("title", "New title", max_length=100)),
+            _optional(choice("type", "New kind of event", EVENT_TYPES)),
+            _optional(text("date", "New day, like 2026-12-05")),
+            _optional(text("time", "New 24-hour start time, like 20:00")),
+            _minutes(
+                "close",
+                "New minutes before the start that sign-ups close",
+                required=False,
+            ),
+        ],
+        suggest=suggest_events,
+    ),
+    Subcommand(
+        ("event", "cancel"),
+        "Cancel an upcoming event; its post says so",
+        _cancel,
+        (ADMIN_ROLE,),
+        [EVENT_OPTION],
+        suggest=suggest_events,
+    ),
+    Subcommand(
+        ("event", "delete"),
+        "Delete an event and its post (the data is kept)",
+        _delete,
+        (ADMIN_ROLE,),
+        [EVENT_OPTION],
+        suggest=suggest_any_events,
     ),
     Subcommand(("event", "list"), "List upcoming events", _list),
     Subcommand(
