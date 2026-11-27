@@ -10,6 +10,7 @@ dependencies = [
     "aiosqlite>=0.22.1",
     "attrs>=26.1.0",
     "granian",
+    "httpx>=0.28.1",
     "litestar",
     "litestar-granian>=0.17.0",
     "pynacl>=1.6.2",
@@ -22,7 +23,6 @@ dev = [
     "ansible-lint>=26.11.1",
     "anyio>=4.16.0",
     "dark-madr",
-    "httpx",
     "invoke>=3.0.3",
     "mypy",
     "pre-commit>=4.7.0",
@@ -50,6 +50,10 @@ omit = ["src/wgm/db/migrations/*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+filterwarnings = [
+    # Raised inside advanced-alchemy 1.12 on SQLAlchemy 2.1; not our code.
+    "ignore:The declarative_mixin decorator:sqlalchemy.exc.SADeprecationWarning",
+]
 addopts = "--import-mode=importlib --cov=wgm --cov=tasks --cov-branch --cov-report=term-missing --cov-fail-under=100"
 
 [tool.mypy]

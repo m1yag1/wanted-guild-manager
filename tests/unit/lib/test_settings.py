@@ -72,3 +72,19 @@ def test_optional_discord_values_default_to_empty() -> None:
     settings = Settings.from_env({KEY: "abc"})
 
     assert settings.discord.bot_token == ""
+
+
+def test_event_times_default_to_eastern() -> None:
+    assert str(Settings.from_env({KEY: "abc"}).timezone) == "America/New_York"
+
+
+def test_the_time_zone_can_be_changed() -> None:
+    settings = Settings.from_env({KEY: "abc", "WGM_TIMEZONE": "Europe/London"})
+
+    assert str(settings.timezone) == "Europe/London"
+
+
+def test_discord_api_url_can_point_elsewhere() -> None:
+    settings = Settings.from_env({KEY: "abc", "WGM_DISCORD_API_URL": "http://x"})
+
+    assert settings.discord.api_url == "http://x"

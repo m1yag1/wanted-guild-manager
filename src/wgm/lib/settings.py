@@ -7,9 +7,14 @@ directory when one exists. See `.env.example` for the full list.
 import os
 from collections.abc import Mapping
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
-from attrs import frozen
+from attrs import field, frozen
 from dotenv import dotenv_values
+
+DEFAULT_DATABASE_URL = "sqlite+aiosqlite:///wgm.db"
+DEFAULT_TIMEZONE = "America/New_York"
+DEFAULT_DISCORD_API_URL = "https://discord.com/api/v10"
 
 
 class MissingSettingError(RuntimeError):
@@ -25,6 +30,11 @@ def _require(env: Mapping[str, str], name: str) -> str:
     if not value:
         raise MissingSettingError(name)
     return value
+
+
+def _zone(value: str | ZoneInfo) -> ZoneInfo:
+    """A time zone from its IANA name, such as America/New_York."""
+    return value if isinstance(value, ZoneInfo) else ZoneInfo(value)
 
 
 @frozen
@@ -43,8 +53,8 @@ class DiscordSettings:
     guild_id: str = ""
     """A server to register commands in, so changes show up at once (staging)."""
 
-
-DEFAULT_DATABASE_URL = "sqlite+aiosqlite:///wgm.db"
+    api_url: str = DEFAULT_DISCORD_API_URL
+    """Discord's REST API. Tests point this at a local fake."""
 
 
 @frozen
@@ -54,6 +64,8 @@ class Settings:
     discord: DiscordSettings
     database_url: str = DEFAULT_DATABASE_URL
     """SQLAlchemy URL. Defaults to a `wgm.db` file in the working directory."""
+    timezone: ZoneInfo = field(default=ZoneInfo(DEFAULT_TIMEZONE), converter=_zone)
+    """Time zone that managers type event times in (the guild leader's)."""
 
     @classmethod
     def from_env(cls, env: Mapping[str, str]) -> "Settings":
@@ -74,9 +86,12 @@ class Settings:
                 application_id=env.get("WGM_DISCORD_APPLICATION_ID", "").strip(),
                 bot_token=env.get("WGM_DISCORD_BOT_TOKEN", "").strip(),
                 guild_id=env.get("WGM_DISCORD_GUILD_ID", "").strip(),
+                api_url=env.get("WGM_DISCORD_API_URL", "").strip()
+                or DEFAULT_DISCORD_API_URL,
             ),
             database_url=env.get("WGM_DATABASE_URL", "").strip()
             or DEFAULT_DATABASE_URL,
+            timezone=env.get("WGM_TIMEZONE", "").strip() or DEFAULT_TIMEZONE,
         )
 
 

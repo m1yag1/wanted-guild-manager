@@ -59,7 +59,7 @@ def discord_api() -> Iterator[FakeDiscordApi]:
             self.end_headers()
             self.wfile.write(payload)
 
-        do_GET = do_PUT = do_PATCH = _handle
+        do_GET = do_POST = do_PUT = do_PATCH = _handle
 
         def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
             """Keep test output quiet."""
