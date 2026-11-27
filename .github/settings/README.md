@@ -23,3 +23,6 @@ Add the `automerge` label to a pull request, from the GitHub app or with
 `gh pr edit <number> --add-label automerge`. The Auto-merge workflow then
 rebase-merges it as soon as the "Lint, types and tests" check passes (right away
 if it already has). No approval is needed. Remove the label to cancel.
+
+Dependabot's patch and minor updates get the label automatically
+(`.github/workflows/dependabot.yml`); major updates wait for review.

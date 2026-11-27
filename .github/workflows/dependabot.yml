@@ -1,0 +1,33 @@
+name: Dependabot
+
+# Labels Dependabot's patch and minor updates "automerge", so the Auto-merge
+# workflow merges them once CI passes. Major updates are left for review.
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  label:
+    name: Label safe updates
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Read the update type
+        id: metadata
+        uses: dependabot/fetch-metadata@v3
+        with:
+          github-token: ${{ github.token }}
+
+      - name: Add the automerge label
+        if: >-
+          steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
+          steps.metadata.outputs.update-type == 'version-update:semver-minor'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: gh pr edit "$PR" --add-label automerge
