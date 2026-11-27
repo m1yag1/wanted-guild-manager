@@ -17,6 +17,7 @@ from wgm.lib.settings import load_settings
 
 BUILD_DIR = ROOT / "dist" / "release"
 KEEP_RELEASES = 5
+KEEP_BACKUPS = 10
 
 
 class DirtyTreeError(RuntimeError):
@@ -90,6 +91,7 @@ def deploy_vars(
         "env_file": str(secrets),
         "python_version": config.python_version,
         "keep_releases": KEEP_RELEASES,
+        "keep_backups": KEEP_BACKUPS,
     }
 
 

@@ -73,6 +73,22 @@ Routes so far:
   request without a valid Discord signature, answers Discord's PING, and
   answers `/wgm help` with a private list of commands.
 
+## Database
+
+SQLite through Advanced Alchemy (ADR 0011). Models are in `src/wgm/db/models/`,
+migrations in `src/wgm/db/migrations/`. Locally the database is `wgm.db` in the
+working folder (`WGM_DATABASE_URL` overrides it).
+
+```bash
+uv run litestar --app wgm.server.app:create_app database upgrade --no-prompt
+uv run litestar --app wgm.server.app:create_app database make-migrations -m "describe the change"
+```
+
+After changing a model, make a migration: a test fails when the models and
+migrations differ. On the droplet, migrations run automatically when the service
+starts, and `inv deploy` backs up the database first (the last 10 backups are
+kept in `/var/lib/wgm/<env>/backups/`).
+
 ## Tasks
 
 ```bash

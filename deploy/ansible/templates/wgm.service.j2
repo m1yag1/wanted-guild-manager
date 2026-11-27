@@ -10,6 +10,9 @@ Group=wgm
 WorkingDirectory=/opt/wgm/{{ item.name }}/current
 EnvironmentFile=/etc/wgm/{{ item.name }}.env
 Environment=LITESTAR_APP=wgm.server.app:create_app
+Environment=WGM_DATABASE_URL=sqlite+aiosqlite:////var/lib/wgm/{{ item.name }}/wgm.db
+# Apply database migrations before every start; a failed migration stops the start.
+ExecStartPre=/opt/wgm/{{ item.name }}/current/.venv/bin/litestar database upgrade --no-prompt
 ExecStart=/opt/wgm/{{ item.name }}/current/.venv/bin/litestar run --host 127.0.0.1 --port {{ item.port }}
 KillSignal=SIGINT
 TimeoutStopSec=30
@@ -19,6 +22,7 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
+ReadWritePaths=/var/lib/wgm/{{ item.name }}
 
 [Install]
 WantedBy=multi-user.target
