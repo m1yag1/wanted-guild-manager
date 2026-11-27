@@ -34,6 +34,15 @@ class DiscordSettings:
     public_key: str
     """Hex-encoded Ed25519 key that Discord signs interactions with."""
 
+    application_id: str = ""
+    """The application's ID, needed to register commands."""
+
+    bot_token: str = ""
+    """The bot's token, needed to call Discord's API."""
+
+    guild_id: str = ""
+    """A server to register commands in, so changes show up at once (staging)."""
+
 
 @frozen
 class Settings:
@@ -57,6 +66,9 @@ class Settings:
         return cls(
             discord=DiscordSettings(
                 public_key=_require(env, "WGM_DISCORD_PUBLIC_KEY"),
+                application_id=env.get("WGM_DISCORD_APPLICATION_ID", "").strip(),
+                bot_token=env.get("WGM_DISCORD_BOT_TOKEN", "").strip(),
+                guild_id=env.get("WGM_DISCORD_GUILD_ID", "").strip(),
             ),
         )
 

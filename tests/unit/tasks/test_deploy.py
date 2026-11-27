@@ -13,11 +13,13 @@ from tasks.deploy import (
     current_version,
     deploy_vars,
     env_file,
+    point_discord_here,
     release_task,
     rollback_task,
 )
 from tasks.shell import Shell
 from tests.fixtures.commands import FakeCommand, MakeFakeCommand
+from tests.fixtures.discord_api import FakeDiscordApi
 from tests.fixtures.droplet import IP
 
 
@@ -137,3 +139,33 @@ def test_rollback_task_runs_the_rollback_playbook(
         "env": "staging",
         "app_port": 8001,
     }
+
+
+def test_points_discord_at_the_new_droplet(
+    discord_api: FakeDiscordApi, config: DropletConfig, tmp_path: Path
+) -> None:
+    secrets = tmp_path / ".env.staging"
+    secrets.write_text("WGM_DISCORD_PUBLIC_KEY=abc\nWGM_DISCORD_BOT_TOKEN=token\n")
+
+    point_discord_here(config, "staging", IP, secrets, discord_api.url)
+
+    assert discord_api.requests[0].body == {
+        "interactions_endpoint_url": (
+            "https://staging.203-0-113-7.sslip.io/discord/interactions"
+        )
+    }
+
+
+def test_skips_discord_without_a_bot_token(
+    discord_api: FakeDiscordApi,
+    config: DropletConfig,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    secrets = tmp_path / ".env.staging"
+    secrets.write_text("WGM_DISCORD_PUBLIC_KEY=abc\n")
+
+    point_discord_here(config, "staging", IP, secrets, discord_api.url)
+
+    assert discord_api.requests == []
+    assert "Skipped the Discord endpoint" in capsys.readouterr().out

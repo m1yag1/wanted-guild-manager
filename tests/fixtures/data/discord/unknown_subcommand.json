@@ -1,0 +1,39 @@
+{
+  "id": "1311000000000000002",
+  "application_id": "1310000000000000000",
+  "type": 2,
+  "token": "fake-interaction-token",
+  "version": 1,
+  "guild_id": "1290000000000000000",
+  "channel_id": "1290000000000000001",
+  "locale": "en-US",
+  "guild_locale": "en-US",
+  "app_permissions": "2248473465835073",
+  "data": {
+    "id": "1312000000000000000",
+    "name": "wgm",
+    "type": 1,
+    "options": [
+      {
+        "name": "dance",
+        "type": 1,
+        "options": []
+      }
+    ]
+  },
+  "member": {
+    "user": {
+      "id": "53908232506183680",
+      "username": "mason",
+      "discriminator": "0",
+      "avatar": null,
+      "global_name": "Mason"
+    },
+    "roles": [],
+    "nick": "Kael",
+    "joined_at": "2026-01-10T18:00:00.000000+00:00",
+    "permissions": "2248473465835073",
+    "deaf": false,
+    "mute": false
+  }
+}

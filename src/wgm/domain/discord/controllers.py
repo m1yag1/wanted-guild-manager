@@ -5,6 +5,7 @@ from litestar.exceptions import ClientException
 from litestar.params import JSONBody
 from litestar.status_codes import HTTP_200_OK
 
+from wgm.domain.discord.commands import run_command
 from wgm.domain.discord.guards import require_discord_signature
 from wgm.domain.discord.schemas import (
     Interaction,
@@ -32,4 +33,6 @@ class DiscordController(Controller):
         """
         if data.type is InteractionType.PING:
             return InteractionResponse(type=InteractionResponseType.PONG)
+        if data.type is InteractionType.APPLICATION_COMMAND and data.data:
+            return run_command(data.data)
         raise ClientException(f"Unsupported interaction type: {data.type.name}")

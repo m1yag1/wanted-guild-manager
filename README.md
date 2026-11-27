@@ -70,7 +70,8 @@ Routes so far:
 
 - `GET /ping` answers `{"message": "pong!"}`.
 - `POST /discord/interactions` receives Discord interactions. It rejects any
-  request without a valid Discord signature and answers Discord's PING.
+  request without a valid Discord signature, answers Discord's PING, and
+  answers `/wgm help` with a private list of commands.
 
 ## Tasks
 
@@ -86,9 +87,11 @@ You need `doctl` logged in and the `wgm-do` SSH key (`~/.ssh/wgm_do`).
 
 ```bash
 cp .env.example .env.staging          # fill in the staging Discord values
+uv run inv discord.invite-url         # link that adds the app to your test server
+uv run inv discord.register-commands  # register /wgm in that server
 uv run inv droplet.up                 # create (if needed) and provision; prints the link
-uv run inv deploy                     # build and deploy to staging
-uv run inv status                     # service, version, /ping and certificate
+uv run inv deploy                     # build, deploy and point Discord at staging
+uv run inv status                     # service, version, /ping, certificate, Discord link
 uv run inv logs --since 30m           # app logs (--service nginx for nginx)
 uv run inv deploy.rollback            # back to the previous release
 uv run inv droplet.down               # delete the droplet (asks for its name)
