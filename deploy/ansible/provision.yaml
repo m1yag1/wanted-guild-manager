@@ -50,6 +50,7 @@
           - ufw
           - unattended-upgrades
           - curl
+          - sqlite3
         # Always refresh: a new droplet's package index can be stale and 404.
         update_cache: true
 
@@ -103,6 +104,17 @@
       loop: "{{ environments }}"
       loop_control:
         label: "{{ item.name }}"
+
+    - name: Create per-environment data directories (outside the releases)
+      ansible.builtin.file:
+        path: "{{ item.0 }}/{{ item.1.name }}{{ item.2 }}"
+        state: directory
+        owner: "{{ app_user }}"
+        group: "{{ app_user }}"
+        mode: "0750"
+      loop: "{{ ['/var/lib/wgm'] | product(environments, ['', '/backups']) | map('flatten') | list }}"
+      loop_control:
+        label: "/var/lib/wgm/{{ item.1.name }}{{ item.2 }}"
 
     - name: Create the secrets directory
       ansible.builtin.file:

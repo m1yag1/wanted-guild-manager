@@ -24,3 +24,6 @@ deploy/ansible/inventories/*.json
 # Project Claude skills are tracked even though the global gitignore skips .claude
 !.claude/
 .claude/settings.local.json
+
+# Local SQLite database
+*.db

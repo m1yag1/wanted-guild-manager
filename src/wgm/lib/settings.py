@@ -44,11 +44,16 @@ class DiscordSettings:
     """A server to register commands in, so changes show up at once (staging)."""
 
 
+DEFAULT_DATABASE_URL = "sqlite+aiosqlite:///wgm.db"
+
+
 @frozen
 class Settings:
     """All application settings."""
 
     discord: DiscordSettings
+    database_url: str = DEFAULT_DATABASE_URL
+    """SQLAlchemy URL. Defaults to a `wgm.db` file in the working directory."""
 
     @classmethod
     def from_env(cls, env: Mapping[str, str]) -> "Settings":
@@ -70,6 +75,8 @@ class Settings:
                 bot_token=env.get("WGM_DISCORD_BOT_TOKEN", "").strip(),
                 guild_id=env.get("WGM_DISCORD_GUILD_ID", "").strip(),
             ),
+            database_url=env.get("WGM_DATABASE_URL", "").strip()
+            or DEFAULT_DATABASE_URL,
         )
 
 

@@ -62,6 +62,19 @@
         group: root
         mode: "0600"
 
+    - name: Back up the database before the new release migrates it
+      become: true
+      become_user: wgm
+      ansible.builtin.shell:
+        cmd: |
+          set -euo pipefail
+          data=/var/lib/wgm/{{ env }}
+          [ -f "$data/wgm.db" ] || exit 0
+          sqlite3 "$data/wgm.db" ".backup '$data/backups/wgm-$(date -u +%Y%m%dT%H%M%SZ)-{{ version }}.db'"
+          ls -1t "$data"/backups/*.db | tail -n +{{ keep_backups | int + 1 }} | xargs -r rm --
+        executable: /bin/bash
+      changed_when: true
+
     - name: Point current at the new release
       ansible.builtin.file:
         src: "{{ release_dir }}"
