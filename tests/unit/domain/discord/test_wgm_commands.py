@@ -202,3 +202,15 @@ async def test_unknown_subcommands_get_the_help_text(
     reply = await interact(discord_payload("unknown_subcommand"))
 
     assert _content(reply).startswith("Unknown command.")
+
+
+@pytest.mark.anyio
+async def test_dev_commands_are_not_answered_outside_dev_mode(
+    interact: Interact, wgm_command: MakeCommand, roles: FakeDiscordApi
+) -> None:
+    reply = await interact(
+        wgm_command("event seed", preset="busy", roles=(ADMIN_ROLE_ID,))
+    )
+
+    assert _content(reply).startswith("Unknown command.")
+    assert "seed" not in _content(reply)

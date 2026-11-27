@@ -3,16 +3,19 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from wgm.domain.discord.commands import SUBCOMMANDS, selected, wgm_command
+from wgm.domain.discord.commands import selected, wgm_command
 from wgm.domain.discord.schemas import InteractionOption
+from wgm.domain.events.commands import SUBCOMMANDS
+from wgm.domain.events.plugin import EventPlugin
 from wgm.domain.events.services import EventInputError, parse_start
+from wgm.plugins import Plugins
 
 EASTERN = ZoneInfo("America/New_York")
 NOW = datetime(2026, 11, 27, 12, 0, tzinfo=UTC)
 
 
 def test_wgm_groups_event_subcommands() -> None:
-    command = wgm_command()
+    command = wgm_command(Plugins(items=(EventPlugin(),)))
     top = {option["name"]: option for option in command["options"]}
 
     assert set(top) == {"help", "setup", "event", "config"}

@@ -11,10 +11,11 @@ import msgspec
 from advanced_alchemy.extensions.litestar import SQLAlchemyAsyncConfig
 
 from wgm.domain.discord.client import DiscordClient
-from wgm.domain.discord.commands import CommandContext, private_reply, run_command
+from wgm.domain.discord.commands import run_command
+from wgm.domain.discord.context import CommandContext, private_reply
 from wgm.domain.discord.schemas import Interaction, InteractionResponse
-from wgm.domain.events.services import EventService, GuildSettingsService
 from wgm.lib.settings import Settings
+from wgm.plugins import Plugins
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,7 @@ async def finish_command(
     settings: Settings,
     discord: DiscordClient,
     db: SQLAlchemyAsyncConfig,
+    plugins: Plugins,
 ) -> None:
     """Run the command in its own session and edit the real reply in."""
     async with db.get_session() as session:
@@ -31,9 +33,9 @@ async def finish_command(
             interaction=interaction,
             settings=settings,
             discord=discord,
-            events=EventService(session=session),
-            guilds=GuildSettingsService(session=session),
+            session=session,
             now=datetime.now(UTC),
+            plugins=plugins,
         )
         reply: InteractionResponse
         try:

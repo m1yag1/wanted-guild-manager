@@ -15,6 +15,8 @@ from dotenv import dotenv_values
 DEFAULT_DATABASE_URL = "sqlite+aiosqlite:///wgm.db"
 DEFAULT_TIMEZONE = "America/New_York"
 DEFAULT_DISCORD_API_URL = "https://discord.com/api/v10"
+DEFAULT_PLUGINS = ("event",)
+TRUE = ("1", "true", "yes", "on")
 
 
 class MissingSettingError(RuntimeError):
@@ -35,6 +37,11 @@ def _require(env: Mapping[str, str], name: str) -> str:
 def _zone(value: str | ZoneInfo) -> ZoneInfo:
     """A time zone from its IANA name, such as America/New_York."""
     return value if isinstance(value, ZoneInfo) else ZoneInfo(value)
+
+
+def _names(value: str) -> tuple[str, ...]:
+    """ "event, dev" -> ("event", "dev")"""
+    return tuple(name.strip() for name in value.split(",") if name.strip())
 
 
 @frozen
@@ -66,6 +73,12 @@ class Settings:
     """SQLAlchemy URL. Defaults to a `wgm.db` file in the working directory."""
     timezone: ZoneInfo = field(default=ZoneInfo(DEFAULT_TIMEZONE), converter=_zone)
     """Time zone that managers type event times in (the guild leader's)."""
+    plugins: tuple[str, ...] = DEFAULT_PLUGINS
+    """Plugins to turn on (ADR 0013), from WGM_PLUGINS such as `event,dev`."""
+    dev_mode: bool = False
+    """Add the plugins' commands for trying things by hand. Staging only."""
+    environ: Mapping[str, str] = field(factory=dict, eq=False)
+    """Every WGM_* variable, for the settings plugins declare."""
 
     @classmethod
     def from_env(cls, env: Mapping[str, str]) -> "Settings":
@@ -92,6 +105,9 @@ class Settings:
             database_url=env.get("WGM_DATABASE_URL", "").strip()
             or DEFAULT_DATABASE_URL,
             timezone=env.get("WGM_TIMEZONE", "").strip() or DEFAULT_TIMEZONE,
+            plugins=_names(env.get("WGM_PLUGINS", "")) or DEFAULT_PLUGINS,
+            dev_mode=env.get("WGM_DEV_MODE", "").strip().lower() in TRUE,
+            environ={k: v for k, v in env.items() if k.startswith("WGM_")},
         )
 
 

@@ -17,6 +17,10 @@ dependencies = [
     "python-dotenv>=1.2.4",
 ]
 
+# Plugins WGM_PLUGINS can turn on (ADR 0013).
+[project.entry-points."wgm.plugins"]
+event = "wgm.domain.events.plugin:EventPlugin"
+
 [dependency-groups]
 dev = [
     "ansible>=15.0.0",

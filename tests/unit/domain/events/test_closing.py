@@ -1,6 +1,5 @@
 """Locking event posts once sign-ups close."""
 
-import asyncio
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 
@@ -13,8 +12,9 @@ from tests.fixtures.discord_api import FakeDiscordApi
 from wgm.db.config import database_config
 from wgm.db.models import Event
 from wgm.domain.discord.client import DiscordClient
-from wgm.domain.events.closing import closing_job, lock_closed_posts, repeat
+from wgm.domain.events.closing import close_job, lock_closed_posts
 from wgm.domain.events.services import EventService
+from wgm.plugins import JobContext
 
 NOW = datetime(2026, 11, 27, 12, 0, tzinfo=UTC)
 
@@ -97,26 +97,14 @@ async def test_deleted_posts_stop_being_retried_and_other_errors_are(
 
 
 @pytest.mark.anyio
-async def test_closing_job_uses_the_current_time(
+async def test_the_close_job_locks_as_of_its_clock(
     config: SQLAlchemyAsyncConfig, discord: DiscordClient
 ) -> None:
-    await _post(config, "1", closes_at=datetime.now(UTC) - timedelta(minutes=1))
+    await _post(config, "1", closes_at=NOW - timedelta(minutes=1))
+    earlier = JobContext(config, discord, {}, clock=lambda: NOW - timedelta(hours=1))
+    now = JobContext(config, discord, {}, clock=lambda: NOW)
+    real = JobContext(config, discord, {})
 
-    assert await closing_job(config, discord)() == 1
-
-
-@pytest.mark.anyio
-async def test_repeat_keeps_going_after_a_failure() -> None:
-    runs: list[int] = []
-
-    async def job() -> None:
-        runs.append(len(runs))
-        if len(runs) == 1:
-            raise RuntimeError("boom")
-
-    task = asyncio.create_task(repeat(0, job))
-    while len(runs) < 3:  # noqa: ASYNC110
-        await asyncio.sleep(0)
-    task.cancel()
-
-    assert runs[:3] == [0, 1, 2]
+    assert await close_job(earlier) == 0
+    assert await close_job(now) == 1
+    assert await close_job(real) == 0

@@ -12,8 +12,9 @@ from tasks.config import CONFIG_FILE, ROOT, DropletConfig
 from tasks.droplet import INVENTORY, read_ip
 from tasks.errors import friendly_errors
 from tasks.shell import say
-from wgm.domain.discord.commands import COMMANDS
+from wgm.domain.discord.commands import wgm_command
 from wgm.lib.settings import DiscordSettings, load_settings
+from wgm.plugins import load_plugins
 
 API_URL = "https://discord.com/api/v10"
 USER_AGENT = "DiscordBot (wanted-guild-manager, 0.1)"
@@ -127,6 +128,16 @@ def discord_settings(env_file: Path) -> DiscordSettings:
     return discord
 
 
+def commands(env_file: Path) -> list[dict[str, Any]]:
+    """The commands for the plugins the secrets file turns on (ADR 0013).
+
+    Read from the same file the server gets, so Discord shows exactly the
+    commands that environment answers.
+    """
+    settings = load_settings(environ={}, env_file=env_file)
+    return [wgm_command(load_plugins(settings))]
+
+
 def interactions_url(config: DropletConfig, env: str, ip: str) -> str:
     """The public URL Discord sends interactions to."""
     return f"https://{config.environment(env).hostname(ip)}/discord/interactions"
@@ -145,10 +156,11 @@ def register_commands_task(
     c: Context, env: str = "staging", secrets: str = "", api_url: str = API_URL
 ) -> None:
     """Register the /wgm slash command with Discord."""
-    discord = discord_settings(secrets_file(env, secrets))
+    env_file = secrets_file(env, secrets)
+    discord = discord_settings(env_file)
     try:
         registered = DiscordRest(discord.bot_token, api_url).register_commands(
-            discord.application_id, discord.guild_id, COMMANDS
+            discord.application_id, discord.guild_id, commands(env_file)
         )
     except DiscordApiError as error:
         if error.code != MISSING_ACCESS:
