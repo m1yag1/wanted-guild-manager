@@ -85,3 +85,30 @@ def wgm_command(discord_payload: LoadPayload) -> MakeCommand:
         return json.dumps(payload).encode()
 
     return make
+
+
+MakeButton = Callable[..., bytes]
+
+
+@pytest.fixture
+def wgm_button(discord_payload: LoadPayload) -> MakeButton:
+    """A button-press interaction body for a `custom_id`.
+
+    `user_id` and `nick` describe who pressed it; `message_id` is the post.
+    """
+
+    def make(
+        custom_id: str,
+        *,
+        user_id: str = "53908232506183680",
+        nick: str | None = "Kael",
+        message_id: str = "5550001",
+    ) -> bytes:
+        payload = json.loads(discord_payload("message_component"))
+        payload["data"]["custom_id"] = custom_id
+        payload["member"]["user"]["id"] = user_id
+        payload["member"]["nick"] = nick
+        payload["message"] = {"id": message_id, "channel_id": "1290000000000000001"}
+        return json.dumps(payload).encode()
+
+    return make

@@ -4,6 +4,7 @@ See https://discord.com/developers/docs/interactions/receiving-and-responding
 """
 
 from enum import IntEnum, IntFlag
+from typing import Any
 
 import msgspec
 
@@ -23,6 +24,10 @@ class InteractionResponseType(IntEnum):
 
     PONG = 1
     CHANNEL_MESSAGE_WITH_SOURCE = 4
+    DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE = 5
+    """Shows "thinking..." until we edit the reply in."""
+    UPDATE_MESSAGE = 7
+    """Edit the message whose button was pressed."""
 
 
 class MessageFlags(IntFlag):
@@ -68,6 +73,13 @@ class Member(msgspec.Struct):
     nick: str | None = None
 
 
+class Message(msgspec.Struct):
+    """The message a button belongs to."""
+
+    id: str
+    channel_id: str = ""
+
+
 class Interaction(msgspec.Struct):
     """An incoming interaction. Unknown fields are ignored."""
 
@@ -80,13 +92,17 @@ class Interaction(msgspec.Struct):
     guild_id: str | None = None
     channel_id: str | None = None
     member: Member | None = None
+    message: Message | None = None
 
 
 class MessageData(msgspec.Struct, omit_defaults=True):
     """The message we reply with."""
 
-    content: str
+    content: str = ""
     flags: MessageFlags = MessageFlags(0)
+    components: list[dict[str, Any]] | None = None
+    allowed_mentions: dict[str, list[str]] | None = None
+    """Set to {"parse": []} so names in a post never ping anyone."""
 
 
 class InteractionResponse(msgspec.Struct, omit_defaults=True):

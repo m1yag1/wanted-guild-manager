@@ -3,15 +3,14 @@
 from typing import Any
 
 import pytest
-from litestar import Litestar
-from litestar.testing import AsyncTestClient
 
+from tests.fixtures.app import Interact
 from tests.fixtures.discord import (
     ADMIN_ROLE_ID,
     GUILD_ID,
     MANAGE_SERVER,
+    LoadPayload,
     MakeCommand,
-    Sign,
 )
 from tests.fixtures.discord_api import FakeDiscordApi
 
@@ -30,17 +29,6 @@ def roles(discord_api: FakeDiscordApi) -> FakeDiscordApi:
     return discord_api
 
 
-async def _run(app: Litestar, sign: Sign, body: bytes) -> dict[str, Any]:
-    signed, headers = sign(body)
-    async with AsyncTestClient(app=app) as client:
-        response = await client.post(
-            "/discord/interactions", content=signed, headers=headers
-        )
-    assert response.status_code == 200, response.text
-    reply: dict[str, Any] = response.json()
-    return reply
-
-
 def _content(reply: dict[str, Any]) -> str:
     return str(reply["data"]["content"])
 
@@ -51,9 +39,9 @@ def _private(reply: dict[str, Any]) -> bool:
 
 @pytest.mark.anyio
 async def test_help_shows_members_only_what_they_can_use(
-    app: Litestar, sign: Sign, wgm_command: MakeCommand, roles: FakeDiscordApi
+    interact: Interact, wgm_command: MakeCommand, roles: FakeDiscordApi
 ) -> None:
-    reply = await _run(app, sign, wgm_command("help"))
+    reply = await interact(wgm_command("help"))
 
     assert "`/wgm help`" in _content(reply)
     assert "`/wgm event list`" in _content(reply)
@@ -62,9 +50,9 @@ async def test_help_shows_members_only_what_they_can_use(
 
 @pytest.mark.anyio
 async def test_help_shows_admins_everything(
-    app: Litestar, sign: Sign, wgm_command: MakeCommand, roles: FakeDiscordApi
+    interact: Interact, wgm_command: MakeCommand, roles: FakeDiscordApi
 ) -> None:
-    reply = await _run(app, sign, wgm_command("help", roles=(ADMIN_ROLE_ID,)))
+    reply = await interact(wgm_command("help", roles=(ADMIN_ROLE_ID,)))
 
     assert "`/wgm event create`" in _content(reply)
     assert "`/wgm setup`" in _content(reply)
@@ -72,9 +60,9 @@ async def test_help_shows_admins_everything(
 
 @pytest.mark.anyio
 async def test_members_cannot_create_events(
-    app: Litestar, sign: Sign, wgm_command: MakeCommand, roles: FakeDiscordApi
+    interact: Interact, wgm_command: MakeCommand, roles: FakeDiscordApi
 ) -> None:
-    reply = await _run(app, sign, wgm_command("event create", **EVENT))
+    reply = await interact(wgm_command("event create", **EVENT))
 
     assert _private(reply)
     assert _content(reply) == (
@@ -84,31 +72,37 @@ async def test_members_cannot_create_events(
 
 @pytest.mark.anyio
 async def test_admins_post_events_and_everyone_can_list_them(
-    app: Litestar, sign: Sign, wgm_command: MakeCommand, roles: FakeDiscordApi
+    interact: Interact, wgm_command: MakeCommand, roles: FakeDiscordApi
 ) -> None:
-    posted = await _run(
-        app, sign, wgm_command("event create", roles=(ADMIN_ROLE_ID,), **EVENT)
+    posted = await interact(
+        wgm_command("event create", roles=(ADMIN_ROLE_ID,), **EVENT)
     )
-    listed = await _run(app, sign, wgm_command("event list"))
+    listed = await interact(wgm_command("event list"))
+    post = next(r for r in roles.requests if r.path.endswith("/messages")).body
 
-    assert not _private(posted)
-    assert _content(posted).startswith("**Siege night** · Siege\n<t:")
-    assert "Attending 0 · Tentative 0 · Not attending 0" in _content(posted)
+    # No event channel set: it posts in the channel the command ran in.
+    assert _content(posted) == "Posted **Siege night** in <#1290000000000000001>."
+    assert _private(posted)
+    assert post["content"].startswith("**Siege night** · Siege\n<t:")
+    assert "**Attending (0)**" in post["content"]
+    assert post["components"][0]["components"][0]["label"] == "Tank"
+    assert post["allowed_mentions"] == {"parse": []}
     assert _private(listed)
-    assert _content(listed) == _content(posted)
+    assert _content(listed).startswith("**Siege night** · Siege\n<t:")
+    assert _content(listed).endswith("Attending 0 · Tentative 0 · Not attending 0")
 
 
 @pytest.mark.anyio
 async def test_server_managers_can_create_events_before_setup(
-    app: Litestar, sign: Sign, wgm_command: MakeCommand, discord_api: FakeDiscordApi
+    interact: Interact, wgm_command: MakeCommand, discord_api: FakeDiscordApi
 ) -> None:
     discord_api.responses[ROLES] = (200, [])
 
-    reply = await _run(
-        app, sign, wgm_command("event create", permissions=MANAGE_SERVER, **EVENT)
+    reply = await interact(
+        wgm_command("event create", permissions=MANAGE_SERVER, **EVENT)
     )
 
-    assert not _private(reply)
+    assert _content(reply).startswith("Posted **Siege night**")
 
 
 @pytest.mark.anyio
@@ -117,8 +111,7 @@ async def test_server_managers_can_create_events_before_setup(
     [("12/05/2099", "Use a date like"), ("2000-01-01", "already passed")],
 )
 async def test_bad_dates_are_explained_privately(
-    app: Litestar,
-    sign: Sign,
+    interact: Interact,
     wgm_command: MakeCommand,
     roles: FakeDiscordApi,
     day: str,
@@ -126,8 +119,8 @@ async def test_bad_dates_are_explained_privately(
 ) -> None:
     values = EVENT | {"date": day}
 
-    reply = await _run(
-        app, sign, wgm_command("event create", roles=(ADMIN_ROLE_ID,), **values)
+    reply = await interact(
+        wgm_command("event create", roles=(ADMIN_ROLE_ID,), **values)
     )
 
     assert _private(reply)
@@ -136,70 +129,76 @@ async def test_bad_dates_are_explained_privately(
 
 @pytest.mark.anyio
 async def test_listing_with_no_events(
-    app: Litestar, sign: Sign, wgm_command: MakeCommand
+    interact: Interact, wgm_command: MakeCommand
 ) -> None:
-    reply = await _run(app, sign, wgm_command("event list"))
+    reply = await interact(wgm_command("event list"))
 
     assert _content(reply) == "No upcoming events."
 
 
 @pytest.mark.anyio
 async def test_setup_creates_the_admin_role(
-    app: Litestar, sign: Sign, wgm_command: MakeCommand, discord_api: FakeDiscordApi
+    interact: Interact, wgm_command: MakeCommand, discord_api: FakeDiscordApi
 ) -> None:
     discord_api.responses[ROLES] = (200, [{"id": "1", "name": "@everyone"}])
     discord_api.responses[CREATE_ROLE] = (200, {"id": "900", "name": "wgm-admin"})
 
-    reply = await _run(app, sign, wgm_command("setup", permissions=MANAGE_SERVER))
+    reply = await interact(wgm_command("setup", permissions=MANAGE_SERVER))
 
     created = [r for r in discord_api.requests if r.method == "POST"]
     assert created[0].body == {"name": "wgm-admin", "mentionable": False}
     assert created[0].authorization == "Bot test-token"
     assert _content(reply).startswith("Created wgm-admin.")
+    assert "Next, choose where events go" in _content(reply)
 
 
 @pytest.mark.anyio
 async def test_setup_twice_changes_nothing(
-    app: Litestar, sign: Sign, wgm_command: MakeCommand, roles: FakeDiscordApi
+    interact: Interact, wgm_command: MakeCommand, roles: FakeDiscordApi
 ) -> None:
-    reply = await _run(app, sign, wgm_command("setup", roles=(ADMIN_ROLE_ID,)))
+    reply = await interact(wgm_command("setup", roles=(ADMIN_ROLE_ID,)))
 
     assert not any(r.method == "POST" for r in roles.requests)
-    assert _content(reply) == "All WGM roles already exist."
+    assert _content(reply).startswith("All WGM roles already exist.")
 
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("path", ["setup", "event create", "event list"])
 async def test_server_commands_outside_a_server(
-    app: Litestar, sign: Sign, wgm_command: MakeCommand, path: str
+    interact: Interact, wgm_command: MakeCommand, path: str
 ) -> None:
     values = EVENT if path == "event create" else {}
 
-    reply = await _run(app, sign, wgm_command(path, in_server=False, **values))
+    reply = await interact(wgm_command(path, in_server=False, **values))
 
     assert _content(reply) == "Run this in a server."
 
 
 @pytest.mark.anyio
 async def test_help_outside_a_server_lists_open_commands(
-    app: Litestar, sign: Sign, wgm_command: MakeCommand
+    interact: Interact, wgm_command: MakeCommand
 ) -> None:
-    reply = await _run(app, sign, wgm_command("help", in_server=False))
+    reply = await interact(wgm_command("help", in_server=False))
 
     assert "`/wgm event list`" in _content(reply)
     assert "setup" not in _content(reply)
 
 
 @pytest.mark.anyio
-async def test_discord_errors_fail_the_request(
-    app: Litestar, sign: Sign, wgm_command: MakeCommand, discord_api: FakeDiscordApi
+async def test_unexpected_errors_become_a_polite_reply(
+    interact: Interact, wgm_command: MakeCommand, discord_api: FakeDiscordApi
 ) -> None:
     discord_api.responses[ROLES] = (403, {"message": "Missing Access", "code": 50001})
-    signed, headers = sign(wgm_command("help"))
 
-    async with AsyncTestClient(app=app) as client:
-        response = await client.post(
-            "/discord/interactions", content=signed, headers=headers
-        )
+    reply = await interact(wgm_command("help"))
 
-    assert response.status_code == 500
+    assert _content(reply) == "Something went wrong. Please try again."
+
+
+@pytest.mark.anyio
+async def test_unknown_subcommands_get_the_help_text(
+    interact: Interact, discord_payload: LoadPayload
+) -> None:
+    reply = await interact(discord_payload("unknown_subcommand"))
+
+    assert _content(reply).startswith("Unknown command.")

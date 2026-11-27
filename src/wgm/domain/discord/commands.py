@@ -9,8 +9,9 @@ from typing import Any
 
 from attrs import field, frozen
 
-from wgm.db.models import Event, SignupStatus
-from wgm.domain.discord.client import DiscordClient
+from wgm.db.models import Event
+from wgm.domain.discord.channel_check import ChannelCheck, check_channel
+from wgm.domain.discord.client import DiscordApiError, DiscordClient
 from wgm.domain.discord.permissions import ADMIN_ROLE, WGM_ROLES, may_run
 from wgm.domain.discord.schemas import (
     Interaction,
@@ -20,11 +21,12 @@ from wgm.domain.discord.schemas import (
     MessageData,
     MessageFlags,
 )
+from wgm.domain.events.roster import buttons, event_post, heading, tally
 from wgm.domain.events.services import (
     EVENT_TYPES,
     EventInputError,
     EventService,
-    counts,
+    GuildSettingsService,
     parse_start,
 )
 from wgm.lib.settings import Settings
@@ -32,6 +34,8 @@ from wgm.lib.settings import Settings
 SUB_COMMAND = 1
 SUB_COMMAND_GROUP = 2
 STRING = 3
+CHANNEL = 7
+TEXT_CHANNEL = 0
 
 
 def _text(name: str, description: str, **extra: Any) -> dict[str, Any]:
@@ -81,6 +85,22 @@ SUBCOMMANDS = (
         ],
     ),
     Subcommand(("event", "list"), "List upcoming events"),
+    Subcommand(
+        ("event", "channel"),
+        "Choose the channel where events are posted",
+        (ADMIN_ROLE,),
+        [
+            {
+                "type": CHANNEL,
+                "name": "channel",
+                "description": "Channel for event posts, such as #sign-up",
+                "required": True,
+                "channel_types": [TEXT_CHANNEL],
+            }
+        ],
+    ),
+    Subcommand(("event", "settings"), "Show the event settings", (ADMIN_ROLE,)),
+    Subcommand(("config", "show"), "Show server-wide settings", (ADMIN_ROLE,)),
 )
 BY_PATH = {sub.path: sub for sub in SUBCOMMANDS}
 
@@ -132,42 +152,17 @@ def selected(
     return tuple(path), {option.name: option.value for option in options}
 
 
+NO_PINGS: dict[str, list[str]] = {"parse": []}
+
+
 def private_reply(content: str) -> InteractionResponse:
     """A reply only the person who ran the command can see."""
     return InteractionResponse(
         type=InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-        data=MessageData(content=content, flags=MessageFlags.EPHEMERAL),
+        data=MessageData(
+            content=content, flags=MessageFlags.EPHEMERAL, allowed_mentions=NO_PINGS
+        ),
     )
-
-
-def public_reply(content: str) -> InteractionResponse:
-    """A message everyone in the channel sees."""
-    return InteractionResponse(
-        type=InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-        data=MessageData(content=content),
-    )
-
-
-def when(moment: datetime) -> str:
-    """A Discord timestamp: each reader sees it in their own time zone."""
-    seconds = int(moment.timestamp())
-    return f"<t:{seconds}:F> (<t:{seconds}:R>)"
-
-
-def tally(event: Event) -> str:
-    """Attending 2 · Tentative 1 · Not attending 0"""
-    totals = counts(event)
-    return (
-        f"Attending {totals[SignupStatus.ATTENDING]} · "
-        f"Tentative {totals[SignupStatus.TENTATIVE]} · "
-        f"Not attending {totals[SignupStatus.NOT_ATTENDING]}"
-    )
-
-
-def event_post(event: Event) -> str:
-    """The public message for an event."""
-    heading = f"**{event.title}** · {event.event_type}"
-    return f"{heading}\n{when(event.starts_at)}\n{tally(event)}"
 
 
 @frozen
@@ -178,6 +173,7 @@ class CommandContext:
     settings: Settings
     discord: DiscordClient
     events: EventService
+    guilds: GuildSettingsService
     now: datetime
 
     @property
@@ -217,16 +213,31 @@ async def help_text(ctx: CommandContext) -> str:
     return "**Wanted Guild Manager**\n" + "\n".join(lines)
 
 
+async def _check(ctx: CommandContext, channel_id: str) -> ChannelCheck:
+    return await check_channel(
+        ctx.discord,
+        guild_id=ctx.guild_id,
+        app_id=ctx.interaction.application_id,
+        channel_id=channel_id,
+    )
+
+
 async def _setup(ctx: CommandContext, values: dict[str, Any]) -> InteractionResponse:
     existing = await ctx.discord.role_ids(ctx.guild_id)
     created = [name for name in WGM_ROLES if name not in existing]
     for name in created:
         await ctx.discord.create_role(ctx.guild_id, name)
-    if not created:
-        return private_reply("All WGM roles already exist.")
-    return private_reply(
+    roles = (
         f"Created {', '.join(created)}. Give it to the members who run events."
+        if created
+        else "All WGM roles already exist."
     )
+    channel_id = (await ctx.guilds.for_guild(ctx.guild_id)).event_channel_id
+    if channel_id is None:
+        return private_reply(
+            f"{roles}\nNext, choose where events go: `/wgm event channel`."
+        )
+    return private_reply(f"{roles}\n\n{(await _check(ctx, channel_id)).report()}")
 
 
 async def _event_create(
@@ -248,15 +259,72 @@ async def _event_create(
             channel_id=ctx.interaction.channel_id,
         )
     )
-    return public_reply(event_post(event))
+    configured = (await ctx.guilds.for_guild(ctx.guild_id)).event_channel_id
+    channel_id = configured or ctx.interaction.channel_id or ""
+    try:
+        message_id = await ctx.discord.post_message(
+            channel_id, event_post(event), buttons(event)
+        )
+    except DiscordApiError:
+        await ctx.events.delete(event.id)
+        check = await _check(ctx, channel_id)
+        return private_reply(
+            f"I couldn't post in <#{channel_id}>, so the event wasn't created.\n\n"
+            f"{check.report()}"
+        )
+    event.channel_id, event.message_id = channel_id, message_id
+    await ctx.events.update(event)
+    return private_reply(f"Posted **{event.title}** in <#{channel_id}>.")
 
 
 async def _event_list(
     ctx: CommandContext, values: dict[str, Any]
 ) -> InteractionResponse:
     events = await ctx.events.upcoming(ctx.guild_id, ctx.now)
-    posts = [event_post(event) for event in events]
+    posts = [f"{heading(event)}\n{tally(event)}" for event in events]
     return private_reply("\n\n".join(posts) or "No upcoming events.")
+
+
+async def _event_channel(
+    ctx: CommandContext, values: dict[str, Any]
+) -> InteractionResponse:
+    channel_id = str(values["channel"])
+    check = await _check(ctx, channel_id)
+    if not check.ok:
+        return private_reply(
+            f"I didn't save <#{channel_id}> because I can't post there yet.\n\n"
+            f"{check.report()}\nThen run this command again."
+        )
+    await ctx.guilds.set_event_channel(ctx.guild_id, channel_id)
+    return private_reply(
+        f"New events will be posted in <#{channel_id}>.\n\n{check.report()}"
+    )
+
+
+async def _event_settings(
+    ctx: CommandContext, values: dict[str, Any]
+) -> InteractionResponse:
+    settings = await ctx.guilds.for_guild(ctx.guild_id)
+    channel = "not set (events post where the command runs)"
+    details = ""
+    if settings.event_channel_id:
+        channel = f"<#{settings.event_channel_id}>"
+        check = await _check(ctx, settings.event_channel_id)
+        warning = "" if check.ok else "⚠️ Events can't be posted there yet.\n"
+        details = f"\n\n{warning}{check.report()}"
+    return private_reply(
+        f"**Event settings**\nChannel: {channel}\n"
+        f"Times are entered in: {ctx.settings.timezone}{details}"
+    )
+
+
+async def _config_show(
+    ctx: CommandContext, values: dict[str, Any]
+) -> InteractionResponse:
+    return private_reply(
+        f"**Server settings**\nTime zone: {ctx.settings.timezone}\n"
+        "Event settings: `/wgm event settings`"
+    )
 
 
 async def _help(ctx: CommandContext, values: dict[str, Any]) -> InteractionResponse:
@@ -268,6 +336,9 @@ HANDLERS = {
     ("setup",): _setup,
     ("event", "create"): _event_create,
     ("event", "list"): _event_list,
+    ("event", "channel"): _event_channel,
+    ("event", "settings"): _event_settings,
+    ("config", "show"): _config_show,
 }
 
 

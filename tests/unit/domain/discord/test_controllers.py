@@ -8,6 +8,7 @@ from litestar.status_codes import (
 from litestar.testing import AsyncTestClient
 
 from tests.fixtures.discord import LoadPayload, Sign
+from tests.fixtures.discord_api import FakeDiscordApi
 
 URL = "/discord/interactions"
 
@@ -54,41 +55,35 @@ async def test_rejects_a_body_changed_after_signing(
 
 
 @pytest.mark.anyio
-async def test_answers_wgm_help_privately(
-    app: Litestar, sign: Sign, discord_payload: LoadPayload
+async def test_slash_commands_answer_thinking_then_edit_in_the_reply(
+    app: Litestar,
+    sign: Sign,
+    discord_payload: LoadPayload,
+    discord_api: FakeDiscordApi,
 ) -> None:
     body, headers = sign(discord_payload("application_command"))
 
     async with AsyncTestClient(app=app) as client:
         response = await client.post(URL, content=body, headers=headers)
 
-    assert response.status_code == HTTP_200_OK
-    reply = response.json()
-    assert reply["type"] == 4
-    assert reply["data"]["flags"] == 64
-    assert "`/wgm help`" in reply["data"]["content"]
-
-
-@pytest.mark.anyio
-async def test_unknown_subcommands_get_the_help_text(
-    app: Litestar, sign: Sign, discord_payload: LoadPayload
-) -> None:
-    body, headers = sign(discord_payload("unknown_subcommand"))
-
-    async with AsyncTestClient(app=app) as client:
-        response = await client.post(URL, content=body, headers=headers)
-
-    assert response.json()["data"]["content"].startswith("Unknown command.")
+    assert response.json() == {"type": 5, "data": {"flags": 64}}
+    edit = discord_api.requests[-1]
+    assert (edit.method, edit.path) == (
+        "PATCH",
+        "/webhooks/1310000000000000000/fake-interaction-token/messages/@original",
+    )
+    assert "`/wgm help`" in edit.body["content"]
+    assert edit.body["flags"] == 64
 
 
 @pytest.mark.anyio
 async def test_reports_interactions_it_does_not_handle_yet(
     app: Litestar, sign: Sign, discord_payload: LoadPayload
 ) -> None:
-    body, headers = sign(discord_payload("message_component"))
+    body, headers = sign(discord_payload("modal_submit"))
 
     async with AsyncTestClient(app=app) as client:
         response = await client.post(URL, content=body, headers=headers)
 
     assert response.status_code == HTTP_400_BAD_REQUEST
-    assert "MESSAGE_COMPONENT" in response.json()["detail"]
+    assert "MODAL_SUBMIT" in response.json()["detail"]
