@@ -11,9 +11,9 @@ from litestar.params import JSONBody
 from litestar.status_codes import HTTP_200_OK
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from wgm.domain.discord.buttons import press
 from wgm.domain.discord.client import DiscordClient
-from wgm.domain.discord.commands import CommandContext
+from wgm.domain.discord.commands import press_button
+from wgm.domain.discord.context import CommandContext
 from wgm.domain.discord.deferred import finish_command
 from wgm.domain.discord.guards import require_discord_signature
 from wgm.domain.discord.schemas import (
@@ -24,7 +24,6 @@ from wgm.domain.discord.schemas import (
     MessageData,
     MessageFlags,
 )
-from wgm.domain.events.services import EventService, GuildSettingsService
 from wgm.lib.settings import Settings
 
 
@@ -65,15 +64,20 @@ class DiscordController(Controller):
                     data=MessageData(flags=MessageFlags.EPHEMERAL),
                 ),
                 background=BackgroundTask(
-                    finish_command, data, settings, discord, state.db_config
+                    finish_command,
+                    data,
+                    settings,
+                    discord,
+                    state.db_config,
+                    state.plugins,
                 ),
             )
         ctx = CommandContext(
             interaction=data,
             settings=settings,
             discord=discord,
-            events=EventService(session=db_session),
-            guilds=GuildSettingsService(session=db_session),
+            session=db_session,
             now=datetime.now(UTC),
+            plugins=state.plugins,
         )
-        return Response(await press(ctx))
+        return Response(await press_button(ctx))

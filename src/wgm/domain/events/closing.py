@@ -5,22 +5,18 @@ and changes "Sign-ups close" to "Sign-ups closed" on the post itself, so
 members can see it without pressing anything.
 """
 
-import asyncio
 import logging
-from collections.abc import Awaitable, Callable
-from datetime import UTC, datetime
-from typing import NoReturn
+from datetime import datetime
 
 from advanced_alchemy.extensions.litestar import SQLAlchemyAsyncConfig
 
 from wgm.domain.discord.client import DiscordApiError, DiscordClient
 from wgm.domain.events.roster import buttons, event_post
 from wgm.domain.events.services import EventService
+from wgm.plugins.spec import JobContext
 
 logger = logging.getLogger(__name__)
 
-CHECK_SECONDS = 60.0
-"""How often to look for posts to lock."""
 GONE = (403, 404)
 """The post was deleted or the app lost access: stop trying."""
 
@@ -53,22 +49,6 @@ async def lock_closed_posts(
     return locked
 
 
-async def repeat(seconds: float, job: Callable[[], Awaitable[object]]) -> NoReturn:
-    """Run `job` every `seconds`, starting after the first wait. Errors are logged."""
-    while True:
-        await asyncio.sleep(seconds)
-        try:
-            await job()
-        except Exception:
-            logger.exception("Background job failed")
-
-
-def closing_job(
-    db: SQLAlchemyAsyncConfig, discord: DiscordClient
-) -> Callable[[], Awaitable[int]]:
-    """The job `repeat` runs: lock what has closed as of now."""
-
-    async def job() -> int:
-        return await lock_closed_posts(db, discord, datetime.now(UTC))
-
-    return job
+async def close_job(ctx: JobContext) -> int:
+    """The event plugin's job: lock what has closed as of now."""
+    return await lock_closed_posts(ctx.db, ctx.discord, ctx.clock())

@@ -19,8 +19,8 @@ from tasks.discord import (
 )
 from tests.fixtures.discord_api import FakeDiscordApi
 from tests.fixtures.droplet import IP
-from wgm.domain.discord.commands import COMMANDS
 
+COMMANDS = [{"name": "wgm"}]
 ENDPOINT = "https://staging.203-0-113-7.sslip.io/discord/interactions"
 
 
@@ -207,3 +207,34 @@ def test_endpoint_report(
     assert endpoint_report(DiscordRest("t", discord_api.url), ENDPOINT).startswith(
         report
     )
+
+
+def _event_commands(api: FakeDiscordApi) -> list[str]:
+    groups = api.requests[0].body[0]["options"]
+    event = next(group for group in groups if group["name"] == "event")
+    return [sub["name"] for sub in event["options"]]
+
+
+def test_register_task_adds_dev_commands_only_in_dev_mode(
+    discord_api: FakeDiscordApi, secrets: Path
+) -> None:
+    register_commands_task(Context(), secrets=str(secrets), api_url=discord_api.url)
+    normal = _event_commands(discord_api)
+    discord_api.requests.clear()
+    secrets.write_text(secrets.read_text() + "WGM_DEV_MODE=true\n")
+
+    register_commands_task(Context(), secrets=str(secrets), api_url=discord_api.url)
+
+    assert "seed" not in normal
+    assert _event_commands(discord_api)[-1] == "seed"
+
+
+def test_register_task_explains_plugin_problems(
+    discord_api: FakeDiscordApi, secrets: Path
+) -> None:
+    secrets.write_text(secrets.read_text() + "WGM_PLUGINS=event,raids\n")
+
+    with pytest.raises(Exit, match="'raids', which isn't installed"):
+        register_commands_task(Context(), secrets=str(secrets), api_url=discord_api.url)
+
+    assert not discord_api.requests

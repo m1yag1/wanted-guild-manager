@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from wgm.domain.discord.commands import NO_PINGS, CommandContext, private_reply
+from wgm.domain.discord.context import NO_PINGS, CommandContext, private_reply
 from wgm.domain.discord.permissions import ADMIN_ROLE
 from wgm.domain.discord.schemas import (
     InteractionResponse,
@@ -10,6 +10,7 @@ from wgm.domain.discord.schemas import (
     MessageData,
 )
 from wgm.domain.events.roster import CHOICES, buttons, closes, event_post, is_closed
+from wgm.domain.events.services import EventService
 
 
 def parse_custom_id(custom_id: str) -> tuple[UUID, str] | None:
@@ -30,7 +31,8 @@ async def press(ctx: CommandContext) -> InteractionResponse:
     parsed = parse_custom_id(data.custom_id if data else "")
     if parsed is None or member is None:
         return private_reply("That button isn't one of ours.")
-    event = await ctx.events.find(parsed[0])
+    events = EventService(session=ctx.session)
+    event = await events.find(parsed[0])
     if event is None:
         return private_reply("That event no longer exists.")
     if is_closed(event, ctx.now):
@@ -42,7 +44,7 @@ async def press(ctx: CommandContext) -> InteractionResponse:
         )
     status, role = CHOICES[parsed[1]]
     name = member.nick or member.user.global_name or member.user.username
-    event = await ctx.events.answer(
+    event = await events.answer(
         event, user_id=member.user.id, name=name, status=status, role=role
     )
     return InteractionResponse(
