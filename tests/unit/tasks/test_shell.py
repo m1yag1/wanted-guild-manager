@@ -41,11 +41,3 @@ def test_failures_without_stderr(fake_command: MakeFakeCommand) -> None:
         Shell(Context()).run([str(tool.path)], capture=False)
 
     assert raised.value.stderr == ""
-
-
-def test_sends_stdin(fake_command: MakeFakeCommand) -> None:
-    tool = fake_command("tool")
-
-    Shell(Context()).run([str(tool.path), "--input", "-"], stdin='{"a": 1}')
-
-    assert tool.calls()[0]["stdin"] == '{"a": 1}'

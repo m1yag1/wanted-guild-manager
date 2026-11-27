@@ -14,7 +14,11 @@ SCRIPT = """#!{python}
 import json, sys
 responses = json.loads({responses!r})
 args = sys.argv[1:]
-call = {{"args": args, "stdin": sys.stdin.read() if "--input" in args else None}}
+body = None
+if "--input" in args:
+    with open(args[args.index("--input") + 1]) as body_file:
+        body = body_file.read()
+call = {{"args": args, "body": body}}
 with open({log!r}, "a") as log:
     log.write(json.dumps(call) + "\\n")
 reply = responses.get(args[2] + " " + args[3], {{}})
@@ -32,7 +36,7 @@ class FakeGh:
     log: Path
 
     def calls(self) -> list[dict[str, Any]]:
-        """Every call so far, as `{"args": [...], "stdin": str | None}`."""
+        """Every call so far, as `{"args": [...], "body": str | None}`."""
         if not self.log.exists():
             return []
         return [json.loads(line) for line in self.log.read_text().splitlines()]

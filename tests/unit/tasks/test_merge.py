@@ -68,7 +68,7 @@ def test_merges_when_labelled_and_the_check_passed(fake_gh: MakeFakeGh) -> None:
     assert merged
     last = gh.calls()[-1]
     assert last["args"][2:4] == ["PUT", f"{REPO}/pulls/7/merge"]
-    assert json.loads(last["stdin"]) == {"merge_method": "rebase", "sha": SHA}
+    assert json.loads(last["body"]) == {"merge_method": "rebase", "sha": SHA}
     assert messages == ["Merged #7."]
 
 
