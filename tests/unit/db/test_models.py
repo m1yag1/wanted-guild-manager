@@ -30,7 +30,6 @@ async def test_events_keep_their_signups_and_delete_them(
             title="Siege night",
             event_type="Siege",
             starts_at=STARTS,
-            capacity=20,
             created_by="42",
         )
         event.signups.append(

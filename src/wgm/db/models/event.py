@@ -36,7 +36,6 @@ class Event(UUIDAuditBase):
     event_type: Mapped[str] = mapped_column(String(32))
     """Siege, Boonstone, Riftstone, Archboss, Guild Raid, Arena or Other."""
     starts_at: Mapped[datetime] = mapped_column(DateTimeUTC(timezone=True))
-    capacity: Mapped[int]
     created_by: Mapped[str] = mapped_column(String(32))
     """Discord user ID of the manager who created it."""
     channel_id: Mapped[str | None] = mapped_column(String(32), default=None)

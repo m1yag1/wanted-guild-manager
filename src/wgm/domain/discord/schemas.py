@@ -33,10 +33,11 @@ class MessageFlags(IntFlag):
 
 
 class InteractionOption(msgspec.Struct):
-    """A chosen subcommand or option value."""
+    """A chosen subcommand, group, or option value."""
 
     name: str
     type: int
+    value: str | int | float | bool | None = None
     options: list["InteractionOption"] = []
 
 
@@ -48,6 +49,25 @@ class InteractionData(msgspec.Struct):
     custom_id: str = ""
 
 
+class User(msgspec.Struct):
+    """A Discord user."""
+
+    id: str
+    username: str = ""
+    global_name: str | None = None
+
+
+class Member(msgspec.Struct):
+    """The user as a member of the server the command ran in."""
+
+    user: User
+    roles: list[str] = []
+    """Role IDs."""
+    permissions: str = "0"
+    """The member's computed permissions in the channel, as a bit string."""
+    nick: str | None = None
+
+
 class Interaction(msgspec.Struct):
     """An incoming interaction. Unknown fields are ignored."""
 
@@ -57,6 +77,9 @@ class Interaction(msgspec.Struct):
     token: str
     version: int
     data: InteractionData | None = None
+    guild_id: str | None = None
+    channel_id: str | None = None
+    member: Member | None = None
 
 
 class MessageData(msgspec.Struct, omit_defaults=True):

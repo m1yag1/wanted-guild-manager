@@ -1,10 +1,15 @@
 """Fixtures for Discord requests: a signing key, signed bodies and payloads."""
 
+import json
 from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 from nacl.signing import SigningKey
+
+GUILD_ID = "1290000000000000000"
+ADMIN_ROLE_ID = "900"
+MANAGE_SERVER = str(1 << 5)
 
 SignedRequest = tuple[bytes, dict[str, str]]
 Sign = Callable[[bytes], SignedRequest]
@@ -42,3 +47,41 @@ def sign(signing_key: SigningKey) -> Sign:
         }
 
     return sign_body
+
+
+MakeCommand = Callable[..., bytes]
+
+
+@pytest.fixture
+def wgm_command(discord_payload: LoadPayload) -> MakeCommand:
+    """A /wgm interaction body for a subcommand path, such as `event create`.
+
+    Keyword arguments become option values; `roles`, `permissions` and
+    `in_server` shape the member who runs it.
+    """
+
+    def make(
+        path: str,
+        *,
+        roles: tuple[str, ...] = (),
+        permissions: str = "0",
+        in_server: bool = True,
+        **values: str,
+    ) -> bytes:
+        payload = json.loads(discord_payload("application_command"))
+        options = [
+            {"name": name, "type": 3, "value": value} for name, value in values.items()
+        ]
+        for name in reversed(path.split()):
+            kind = 1 if not options or options[0]["type"] == 3 else 2
+            options = [{"name": name, "type": kind, "options": options}]
+        payload["data"]["options"] = options
+        payload["member"]["roles"] = list(roles)
+        payload["member"]["permissions"] = permissions
+        if not in_server:
+            for key in ("guild_id", "member"):
+                payload.pop(key)
+            payload["user"] = {"id": "53908232506183680", "username": "mason"}
+        return json.dumps(payload).encode()
+
+    return make
