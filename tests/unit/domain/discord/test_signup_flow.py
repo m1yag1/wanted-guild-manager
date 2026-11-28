@@ -117,7 +117,9 @@ async def test_events_post_in_the_configured_channel(
     assert _content(created) == f"Posted **Siege night** in <#{CHANNEL}>."
     post = next(r for r in roles.requests if r.method == "POST")
     assert post.path == f"/channels/{CHANNEL}/messages"
-    assert post_words(post.body).startswith("## 🦈 [Siege] Siege night\n🕗 <t:")
+    assert post_words(post.body).startswith(
+        "## 🦈 [Siege] Siege night\n-# Shark fact: "
+    )
     assert post_buttons(post.body)[2]["label"] == "DPS"
     assert post.body["allowed_mentions"] == {"parse": []}
 

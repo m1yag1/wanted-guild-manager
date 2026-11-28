@@ -1,3 +1,4 @@
+import random
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
@@ -16,6 +17,7 @@ from wgm.domain.events.roster import (
     tally,
     when,
 )
+from wgm.domain.events.sharks import SHARK_FACTS, shark_fact
 
 STARTS = datetime(2026, 12, 6, 1, 0, tzinfo=UTC)
 CLOSES = STARTS - timedelta(minutes=30)
@@ -152,3 +154,23 @@ def test_late_changes_are_marked() -> None:
     event.signups[0].late = True
 
     assert "🛡️ **Tanks (1)**\nKael (late)" in roster_blocks(event)[0]
+
+
+def test_the_second_line_is_the_description_or_a_shark_fact() -> None:
+    event = _event()
+    bare = post_text(post_components(event, BEFORE))
+    event.shark_fact = "Sharks are older than trees."
+    fact = post_text(post_components(event, BEFORE))
+    event.description = "Bring all you've got!"
+    described = post_text(post_components(event, BEFORE))
+
+    assert bare.startswith("## 🦈 [Siege] Siege night\n🕗")
+    assert fact.startswith(
+        "## 🦈 [Siege] Siege night\n-# Shark fact: Sharks are older than trees."
+    )
+    assert described.startswith("## 🦈 [Siege] Siege night\nBring all you've got!\n🕗")
+
+
+def test_shark_facts_are_short_enough_for_the_database() -> None:
+    assert all(len(fact) <= 200 for fact in SHARK_FACTS)
+    assert shark_fact(random.Random(1)) in SHARK_FACTS

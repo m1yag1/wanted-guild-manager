@@ -133,6 +133,15 @@ def _divider(*, large: bool = False) -> dict[str, Any]:
     return {"type": SEPARATOR, "divider": True, "spacing": 2 if large else 1}
 
 
+def _subtitle(event: Event) -> str:
+    """The admin's description, else the event's shark fact, as a second line."""
+    if event.description:
+        return f"\n{event.description}"
+    if event.shark_fact:
+        return f"\n-# Shark fact: {event.shark_fact}"
+    return ""
+
+
 def _gap() -> dict[str, Any]:
     """Blank space between roster sections, without a line."""
     return {"type": SEPARATOR, "divider": False, "spacing": 2}
@@ -169,7 +178,7 @@ def post_components(event: Event, now: datetime) -> list[dict[str, Any]]:
     )
     attending, others = roster_blocks(event)
     inside = [
-        _text(f"## 🦈 [{event.event_type}] {event.title}"),
+        _text(f"## 🦈 [{event.event_type}] {event.title}{_subtitle(event)}"),
         _text(status_line(event, now)),
         _divider(large=True),
         _text(attending[0]),
