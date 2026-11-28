@@ -73,7 +73,10 @@ async def test_seed_posts_each_preset(
         "Orin (Liberator)" in post_words(posts["busy"])
     )
     assert "**Not attending (2)**: Vex, Nyx" in post_words(posts["busy"])
-    assert "## 🦈 [Test] Old style\n" in post_words(posts["old-style"])
+    assert "## 🦈 [Test] Old style\n-# Shark fact: " in post_words(posts["old-style"])
+    assert "## 🦈 [Test] Busy roster\nWe're fighting the Krakens" in post_words(
+        posts["busy"]
+    )
     assert "Attending 8 · Tentative 2 · Not attending 2" in listed["data"]["content"]
 
 

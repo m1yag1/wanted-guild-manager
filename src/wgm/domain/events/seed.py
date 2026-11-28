@@ -15,6 +15,7 @@ from wgm.domain.discord.options import choice
 from wgm.domain.discord.permissions import ADMIN_ROLE
 from wgm.domain.discord.schemas import InteractionResponse
 from wgm.domain.events.commands import post_event
+from wgm.domain.events.sharks import shark_fact
 
 ROSTER = [
     ("Kael", SignupStatus.ATTENDING, "Tank", None, "Crusader"),
@@ -42,13 +43,18 @@ class Preset:
     closes_before: timedelta | None
     """None leaves the close time unset, like events made before closing existed."""
     roster: bool = False
+    description: str | None = None
 
 
 PRESETS = {
     "closes-soon": Preset("Closes soon", timedelta(minutes=35), timedelta(minutes=30)),
     "closed": Preset("Already closed", timedelta(minutes=20), timedelta(minutes=30)),
     "busy": Preset(
-        "Busy roster", timedelta(days=1), timedelta(minutes=30), roster=True
+        "Busy roster",
+        timedelta(days=1),
+        timedelta(minutes=30),
+        roster=True,
+        description="We're fighting the Krakens tonight, so bring all you've got!",
     ),
     "old-style": Preset("Old style", timedelta(minutes=40), None),
 }
@@ -64,6 +70,8 @@ def test_event(preset: Preset, ctx: CommandContext, now: datetime) -> Event:
         guild_id=ctx.guild_id,
         title=preset.title,
         event_type="Test",
+        description=preset.description,
+        shark_fact=shark_fact(),
         starts_at=starts_at,
         closes_at=starts_at - preset.closes_before if preset.closes_before else None,
         created_by=ctx.user_id,

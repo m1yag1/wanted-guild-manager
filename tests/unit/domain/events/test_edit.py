@@ -275,3 +275,24 @@ async def test_members_cannot_delete(
     reply = await interact(wgm_command("event delete", event=event_id))
 
     assert _content(reply).startswith("You need the wgm-admin role")
+
+
+@pytest.mark.anyio
+async def test_descriptions_are_set_changed_and_cleared(
+    interact: Interact, wgm_command: MakeCommand, roles: FakeDiscordApi
+) -> None:
+    rivals = "We're fighting the Krakens, so bring all you've got!"
+    await interact(wgm_command("event create", description=rivals, **ADMIN, **EVENT))
+    created = [r for r in roles.requests if r.method == "POST"][-1].body
+    event_id = post_buttons(created)[0]["custom_id"].split(":")[1]
+
+    await interact(
+        wgm_command("event edit", event=event_id, description="Gear up!", **ADMIN)
+    )
+    changed = post_words(_edits(roles)[-1])
+    await interact(wgm_command("event edit", event=event_id, description="-", **ADMIN))
+    cleared = post_words(_edits(roles)[-1])
+
+    assert post_words(created).startswith(f"## 🦈 [Siege] Siege night\n{rivals}\n")
+    assert changed.startswith("## 🦈 [Siege] Siege night\nGear up!\n")
+    assert cleared.startswith("## 🦈 [Siege] Siege night\n-# Shark fact: ")

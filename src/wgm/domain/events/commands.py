@@ -42,6 +42,7 @@ from wgm.domain.events.services import (
     parse_start,
     reschedule,
 )
+from wgm.domain.events.sharks import shark_fact
 
 
 def events(ctx: CommandContext) -> EventService:
@@ -110,6 +111,8 @@ async def _create(ctx: CommandContext, values: dict[str, Any]) -> InteractionRes
             event_type=str(values["type"]),
             starts_at=starts_at,
             closes_at=closes_at,
+            description=_description(values.get("description")),
+            shark_fact=shark_fact(),
             created_by=ctx.user_id,
         ),
     )
@@ -262,7 +265,8 @@ async def _edit(ctx: CommandContext, values: dict[str, Any]) -> InteractionRespo
     changes = {key: values[key] for key in EDITABLE if key in values}
     if not changes:
         return private_reply(
-            "Nothing to change. Pick a new title, type, date, time or close."
+            "Nothing to change. Pick a new title, type, date, time, close or "
+            "description."
         )
     try:
         reschedule(
@@ -279,6 +283,8 @@ async def _edit(ctx: CommandContext, values: dict[str, Any]) -> InteractionRespo
         return private_reply(str(error))
     if "title" in changes:
         event.title = str(changes["title"]).strip()
+    if "description" in changes:
+        event.description = _description(changes["description"])
     if "type" in changes:
         event.event_type = str(changes["type"])
     problem = await update_post(ctx, event)
@@ -289,11 +295,17 @@ async def _edit(ctx: CommandContext, values: dict[str, Any]) -> InteractionRespo
     )
 
 
+def _description(value: object) -> str | None:
+    """Typed description text; blank or "-" means none (show a shark fact)."""
+    text = str(value or "").strip()
+    return None if text in ("", "-") else text
+
+
 def _text_or_none(value: object) -> str | None:
     return None if value is None else str(value)
 
 
-EDITABLE = ("title", "type", "date", "time", "close")
+EDITABLE = ("title", "type", "date", "time", "close", "description")
 
 
 async def _cancel(ctx: CommandContext, values: dict[str, Any]) -> InteractionResponse:
@@ -400,6 +412,13 @@ SUBCOMMANDS = (
                 "Minutes before the start that sign-ups close (default: server's)",
                 required=False,
             ),
+            _optional(
+                text(
+                    "description",
+                    "A line under the title, like who we're fighting",
+                    max_length=200,
+                )
+            ),
         ],
     ),
     Subcommand(
@@ -417,6 +436,13 @@ SUBCOMMANDS = (
                 "close",
                 "New minutes before the start that sign-ups close",
                 required=False,
+            ),
+            _optional(
+                text(
+                    "description",
+                    "New line under the title; - to show a shark fact instead",
+                    max_length=200,
+                )
             ),
         ],
         suggest=suggest_events,
