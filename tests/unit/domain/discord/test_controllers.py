@@ -2,7 +2,6 @@ import pytest
 from litestar import Litestar
 from litestar.status_codes import (
     HTTP_200_OK,
-    HTTP_400_BAD_REQUEST,
     HTTP_401_UNAUTHORIZED,
 )
 from litestar.testing import AsyncTestClient
@@ -77,7 +76,7 @@ async def test_slash_commands_answer_thinking_then_edit_in_the_reply(
 
 
 @pytest.mark.anyio
-async def test_reports_interactions_it_does_not_handle_yet(
+async def test_forms_go_to_the_plugin_that_owns_them(
     app: Litestar, sign: Sign, discord_payload: LoadPayload
 ) -> None:
     body, headers = sign(discord_payload("modal_submit"))
@@ -85,5 +84,4 @@ async def test_reports_interactions_it_does_not_handle_yet(
     async with AsyncTestClient(app=app) as client:
         response = await client.post(URL, content=body, headers=headers)
 
-    assert response.status_code == HTTP_400_BAD_REQUEST
-    assert "MODAL_SUBMIT" in response.json()["detail"]
+    assert response.json()["data"]["content"] == "That form isn't one of ours."

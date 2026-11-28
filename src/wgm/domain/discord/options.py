@@ -9,6 +9,7 @@ SUB_COMMAND = 1
 SUB_COMMAND_GROUP = 2
 STRING = 3
 INTEGER = 4
+USER = 6
 CHANNEL = 7
 TEXT_CHANNEL = 0
 
@@ -41,3 +42,8 @@ def integer(
         "min_value": low,
         "max_value": high,
     }
+
+
+def user(name: str, description: str) -> dict[str, Any]:
+    """A required server member."""
+    return {"type": USER, "name": name, "description": description, "required": True}

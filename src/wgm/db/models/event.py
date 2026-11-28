@@ -84,5 +84,45 @@ class Signup(UUIDAuditBase):
     )
     role: Mapped[str | None] = mapped_column(String(16), default=None)
     """Tank, Healer or DPS. Empty for members who are not attending."""
+    reason: Mapped[str | None] = mapped_column(String(200), default=None)
+    """Why they can't come, if they said. Only admins see it."""
+    changed_by: Mapped[str | None] = mapped_column(String(32), default=None)
+    """Discord user ID of whoever set this answer: the member or an admin."""
+    late: Mapped[bool] = mapped_column(default=False, server_default="0")
+    """Set by an admin after sign-ups closed; shown as (late) on the post."""
 
     event: Mapped[Event] = relationship(back_populates="signups")
+
+
+class SignupAction(StrEnum):
+    """What happened to a member's answer."""
+
+    ADDED = "added"
+    CHANGED = "changed"
+    REMOVED = "removed"
+
+
+class SignupChange(UUIDAuditBase):
+    """One change to the roster, kept as history. `created_at` is when."""
+
+    __tablename__ = "signup_change"
+
+    event_id: Mapped[UUID] = mapped_column(
+        ForeignKey("event.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[str] = mapped_column(String(32))
+    """The member whose answer changed."""
+    character_name: Mapped[str] = mapped_column(String(64))
+    action: Mapped[SignupAction] = mapped_column(
+        Enum(SignupAction, native_enum=False, length=16, values_callable=_values)
+    )
+    status: Mapped[SignupStatus | None] = mapped_column(
+        Enum(SignupStatus, native_enum=False, length=16, values_callable=_values),
+        default=None,
+    )
+    """The new answer; empty when removed."""
+    role: Mapped[str | None] = mapped_column(String(16), default=None)
+    changed_by: Mapped[str] = mapped_column(String(32))
+    """Discord user ID of the member or admin who made the change."""
+    late: Mapped[bool] = mapped_column(default=False)
+    """Made after sign-ups closed."""

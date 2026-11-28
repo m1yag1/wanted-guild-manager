@@ -20,6 +20,8 @@ from wgm.domain.discord.schemas import (
     ChoicesData,
     InteractionOption,
     InteractionResponse,
+    InteractionType,
+    ModalResponse,
 )
 from wgm.plugins import Plugins
 
@@ -182,11 +184,14 @@ async def suggest(ctx: CommandContext) -> AutocompleteResponse:
     )
 
 
-async def press_button(ctx: CommandContext) -> InteractionResponse:
-    """Answer a button press with the plugin that owns its custom_id prefix."""
+async def press_button(ctx: CommandContext) -> InteractionResponse | ModalResponse:
+    """Answer a button press or form with the plugin owning its custom_id prefix."""
     data = ctx.interaction.data
     custom_id = data.custom_id if data else ""
     handler = ctx.plugins.button(custom_id.split(":")[0])
     if handler is None:
-        return private_reply("That button isn't one of ours.")
+        kind = (
+            "form" if ctx.interaction.type is InteractionType.MODAL_SUBMIT else "button"
+        )
+        return private_reply(f"That {kind} isn't one of ours.")
     return await handler(ctx)

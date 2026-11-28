@@ -15,6 +15,8 @@ from wgm.db.models import (
     Event,
     GuildSettings,
     Signup,
+    SignupAction,
+    SignupChange,
     SignupStatus,
 )
 
@@ -74,6 +76,19 @@ def closing_time(starts_at: datetime, minutes: int, now: datetime) -> datetime:
             "already passed. Use a later start or a smaller `close`."
         )
     return closes_at
+
+
+@frozen
+class Answer:
+    """A member's answer for an event, and who gave it."""
+
+    user_id: str
+    name: str
+    status: SignupStatus
+    role: str | None
+    by: str
+    """The member themselves, or the admin who set it."""
+    reason: str | None = None
 
 
 @frozen
@@ -147,26 +162,74 @@ class EventService(SQLAlchemyAsyncRepositoryService[Event]):
             statement = statement.where(Event.cancelled_at.is_(None))
         return list(await self.repository.get_many(statement=statement))
 
-    async def answer(
+    def signup(self, event: Event, user_id: str) -> Signup | None:
+        """A member's current answer for an event, if any."""
+        return next((s for s in event.signups if s.user_id == user_id), None)
+
+    async def set_answer(self, event: Event, answer: Answer, now: datetime) -> Event:
+        """Record a member's answer, replacing any earlier one, and log it.
+
+        Changes after sign-ups close are marked late.
+        """
+        late = now >= (event.closes_at or event.starts_at)
+        current = self.signup(event, answer.user_id)
+        action = SignupAction.CHANGED
+        if current is None:
+            action = SignupAction.ADDED
+            current = Signup(user_id=answer.user_id)
+            event.signups.append(current)
+        current.character_name, current.status, current.role = (
+            answer.name,
+            answer.status,
+            answer.role,
+        )
+        current.reason = answer.reason
+        current.changed_by, current.late = answer.by, late
+        self._log(event, current, action, answer.by, late)
+        return await self.update(event)
+
+    async def remove_answer(
+        self, event: Event, user_id: str, by: str, now: datetime
+    ) -> Event:
+        """Take a member off the roster and log it. Does nothing if not on it."""
+        current = self.signup(event, user_id)
+        if current is not None:
+            event.signups.remove(current)
+            late = now >= (event.closes_at or event.starts_at)
+            self._log(event, current, SignupAction.REMOVED, by, late)
+        return await self.update(event)
+
+    def _log(
         self,
         event: Event,
-        *,
-        user_id: str,
-        name: str,
-        status: SignupStatus,
-        role: str | None,
-    ) -> Event:
-        """Record a member's answer. Giving the same answer again removes it."""
-        current = next((s for s in event.signups if s.user_id == user_id), None)
-        if current is None:
-            event.signups.append(
-                Signup(user_id=user_id, character_name=name, status=status, role=role)
+        signup: Signup,
+        action: SignupAction,
+        by: str,
+        late: bool,  # noqa: FBT001
+    ) -> None:
+        removed = action is SignupAction.REMOVED
+        self.repository.session.add(
+            SignupChange(
+                event_id=event.id,
+                user_id=signup.user_id,
+                character_name=signup.character_name,
+                action=action,
+                status=None if removed else signup.status,
+                role=None if removed else signup.role,
+                changed_by=by,
+                late=late,
             )
-        elif (current.status, current.role) == (status, role):
-            event.signups.remove(current)
-        else:
-            current.status, current.role, current.character_name = status, role, name
-        return await self.update(event)
+        )
+
+    async def history(self, event: Event) -> list[SignupChange]:
+        """Every roster change for an event, oldest first."""
+        statement = (
+            select(SignupChange)
+            .where(SignupChange.event_id == event.id)
+            .order_by(SignupChange.created_at)
+        )
+        result = await self.repository.session.execute(statement)
+        return list(result.scalars())
 
     async def find(self, event_id: UUID) -> Event | None:
         """An event by ID, with its sign ups. Deleted events aren't found."""

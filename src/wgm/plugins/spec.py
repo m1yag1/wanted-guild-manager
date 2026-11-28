@@ -73,7 +73,7 @@ class WgmPlugin(Protocol):
         ...
 
     def buttons(self) -> Mapping[str, ButtonHandler]:
-        """Button handlers by custom_id prefix, such as `signup`."""
+        """Handlers for buttons and submitted forms, by custom_id prefix."""
         ...
 
     def jobs(self, config: PluginConfig) -> tuple[Job, ...]:
