@@ -210,3 +210,30 @@ async def test_every_change_is_kept_in_the_history(
         (SignupAction.CHANGED, "DPS", ADMIN_ID, False),
         (SignupAction.REMOVED, None, ADMIN_ID, True),
     ]
+
+
+@pytest.mark.anyio
+async def test_the_reason_form_remembers_the_last_reason_and_history_keeps_each(
+    interact: Interact,
+    wgm_button: MakeButton,
+    wgm_form: MakeForm,
+    settings: Settings,
+    event_id: str,
+) -> None:
+    first = await interact(wgm_button(f"signup:{event_id}:not_attending"))
+    await interact(wgm_form(f"reason:{event_id}", reason="Working late"))
+    await interact(wgm_button(f"signup:{event_id}:tentative"))
+    again = await interact(wgm_button(f"signup:{event_id}:not_attending"))
+    await interact(wgm_form(f"reason:{event_id}", reason="Out of town"))
+
+    async with database_config(settings.database_url).get_session() as session:
+        events = EventService(session=session)
+        history = await events.history(await events.get(UUID(event_id)))
+
+    def field(form: dict[str, Any]) -> dict[str, Any]:
+        component: dict[str, Any] = form["data"]["components"][0]["components"][0]
+        return component
+
+    assert "value" not in field(first)
+    assert field(again)["value"] == "Working late"
+    assert [c.reason for c in history] == ["Working late", None, "Out of town"]

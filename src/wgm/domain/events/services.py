@@ -277,10 +277,25 @@ class EventService(SQLAlchemyAsyncRepositoryService[Event]):
                 action=action,
                 status=None if removed else signup.status,
                 role=None if removed else signup.role,
+                reason=None if removed else signup.reason,
                 changed_by=by,
                 late=late,
             )
         )
+
+    async def last_reason(self, event: Event, user_id: str) -> str | None:
+        """The member's most recent Not attending reason for this event."""
+        found: str | None = await self.repository.session.scalar(
+            select(SignupChange.reason)
+            .where(
+                SignupChange.event_id == event.id,
+                SignupChange.user_id == user_id,
+                SignupChange.reason.is_not(None),
+            )
+            .order_by(SignupChange.created_at.desc())
+            .limit(1)
+        )
+        return found
 
     async def history(self, event: Event) -> list[SignupChange]:
         """Every roster change for an event, oldest first."""

@@ -124,6 +124,8 @@ class SignupChange(UUIDAuditBase):
     )
     """The new answer; empty when removed."""
     role: Mapped[str | None] = mapped_column(String(16), default=None)
+    reason: Mapped[str | None] = mapped_column(String(200), default=None)
+    """The Not attending reason given with this change, if any."""
     changed_by: Mapped[str] = mapped_column(String(32))
     """Discord user ID of the member or admin who made the change."""
     late: Mapped[bool] = mapped_column(default=False)

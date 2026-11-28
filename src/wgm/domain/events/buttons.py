@@ -54,8 +54,11 @@ def redrawn(event: Event, ctx: CommandContext) -> InteractionResponse:
     )
 
 
-def reason_form(event: Event) -> ModalResponse:
-    """The Not attending form, with one optional text field."""
+def reason_form(event: Event, last: str | None = None) -> ModalResponse:
+    """The Not attending form, with one optional text field.
+
+    It's filled in with the member's last reason for this event, if any.
+    """
     return ModalResponse(
         ModalData(
             custom_id=f"{REASON}:{event.id}",
@@ -71,6 +74,7 @@ def reason_form(event: Event) -> ModalResponse:
                             "label": "Reason (optional, only admins see it)",
                             "required": False,
                             "max_length": REASON_LENGTH,
+                            **({"value": last} if last else {}),
                         }
                     ],
                 }
@@ -101,7 +105,7 @@ async def press(ctx: CommandContext) -> InteractionResponse | ModalResponse:
         )
         return redrawn(event, ctx)
     if status is SignupStatus.NOT_ATTENDING:
-        return reason_form(event)
+        return reason_form(event, await events.last_reason(event, member.user.id))
     answer = Answer(member.user.id, _name(member), status, role, by=member.user.id)
     event = await events.set_answer(event, answer, ctx.now)
     if role is None:
