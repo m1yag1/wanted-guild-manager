@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any
 
-from wgm.db.models import Event
+from wgm.db.models import Event, EventType
 from wgm.domain.discord.channel_check import ChannelCheck, check_channel
 from wgm.domain.discord.client import DiscordApiError
 from wgm.domain.discord.context import CommandContext, Subcommand, private_reply
@@ -31,11 +31,11 @@ from wgm.domain.events.roster import (
     tally,
 )
 from wgm.domain.events.services import (
-    EVENT_TYPES,
     MAX_CLOSE_MINUTES,
     Answer,
     EventInputError,
     EventService,
+    EventTypeService,
     GuildSettingsService,
     NewTimes,
     closing_time,
@@ -48,6 +48,11 @@ from wgm.domain.events.sharks import shark_fact
 def events(ctx: CommandContext) -> EventService:
     """Event storage in this interaction's database session."""
     return EventService(session=ctx.session)
+
+
+def types(ctx: CommandContext) -> EventTypeService:
+    """Event types in this interaction's database session."""
+    return EventTypeService(session=ctx.session)
 
 
 def guilds(ctx: CommandContext) -> GuildSettingsService:
@@ -101,6 +106,7 @@ async def _create(ctx: CommandContext, values: dict[str, Any]) -> InteractionRes
         )
         minutes = int(values.get("close", settings.close_minutes))
         closes_at = closing_time(starts_at, minutes, ctx.now)
+        event_type = await _known_type(ctx, values["type"])
     except EventInputError as error:
         return private_reply(str(error))
     return await post_event(
@@ -108,7 +114,7 @@ async def _create(ctx: CommandContext, values: dict[str, Any]) -> InteractionRes
         Event(
             guild_id=ctx.guild_id,
             title=str(values["title"]).strip(),
-            event_type=str(values["type"]),
+            event_type=event_type,
             starts_at=starts_at,
             closes_at=closes_at,
             description=_description(values.get("description")),
@@ -199,31 +205,31 @@ EVENT_OPTION = {
 }
 
 
-async def suggest_events(
+async def suggest(
     ctx: CommandContext, option: str, typed: str
 ) -> list[tuple[str, str]]:
-    """Upcoming events whose title contains what was typed, soonest first."""
-    return await _suggest(ctx, typed, cancelled=False)
+    """Suggestions for the event, type, class and type name options."""
+    if option == "event":
+        return await _suggest(ctx, typed, cancelled=False)
+    if option in ("type", "name"):
+        listed = await types(ctx).listed(ctx.guild_id)
+        return [(t.name, t.name) for t in listed if _matches(typed, t.name)]
+    return [
+        (f"{name} · {weapons}", name)
+        for name, weapons in WEAPONS.items()
+        if _matches(typed, name)
+    ]
 
 
 async def suggest_any_events(
     ctx: CommandContext, option: str, typed: str
 ) -> list[tuple[str, str]]:
-    """Like `suggest_events`, including cancelled events, which are marked."""
+    """Upcoming events, including cancelled ones, which are marked."""
     return await _suggest(ctx, typed, cancelled=True)
 
 
-async def suggest_event_or_class(
-    ctx: CommandContext, option: str, typed: str
-) -> list[tuple[str, str]]:
-    """Events for the event option; classes, with their weapons, for class."""
-    if option != "class":
-        return await suggest_events(ctx, option, typed)
-    return [
-        (f"{name} · {weapons}", name)
-        for name, weapons in WEAPONS.items()
-        if typed.strip().lower() in name.lower()
-    ]
+def _matches(typed: str, name: str) -> bool:
+    return typed.strip().casefold() in name.casefold()
 
 
 async def _suggest(
@@ -238,7 +244,7 @@ async def _suggest(
             str(event.id),
         )
         for event in found
-        if typed.strip().lower() in event.title.lower()
+        if _matches(typed, event.title)
     ]
 
 
@@ -269,6 +275,9 @@ async def _edit(ctx: CommandContext, values: dict[str, Any]) -> InteractionRespo
             "description."
         )
     try:
+        event_type = event.event_type
+        if "type" in changes:
+            event_type = await _known_type(ctx, changes["type"])
         reschedule(
             event,
             NewTimes(
@@ -285,14 +294,28 @@ async def _edit(ctx: CommandContext, values: dict[str, Any]) -> InteractionRespo
         event.title = str(changes["title"]).strip()
     if "description" in changes:
         event.description = _description(changes["description"])
-    if "type" in changes:
-        event.event_type = str(changes["type"])
+    event.event_type = event_type
     problem = await update_post(ctx, event)
     await events(ctx).update(event)
     return private_reply(
         f"Updated **{event.title}**: {', '.join(changes)}.\n"
         f"{heading(event)}\n{closing_line(event, ctx.now)}{problem}"
     )
+
+
+async def _known_type(ctx: CommandContext, typed: object) -> EventType:
+    """The server's listed type that the member typed.
+
+    Raises:
+        EventInputError: It isn't one of the server's types.
+    """
+    found = await types(ctx).find(ctx.guild_id, str(typed))
+    if found is None:
+        raise EventInputError(
+            f"**{str(typed).strip()}** isn't one of this server's event types. "
+            "Add it first with `/wgm event types action:add`."
+        )
+    return found
 
 
 def _description(value: object) -> str | None:
@@ -388,6 +411,32 @@ async def _remove(ctx: CommandContext, values: dict[str, Any]) -> InteractionRes
     )
 
 
+TYPE_ACTIONS = ("list", "add", "remove")
+
+
+async def _types(ctx: CommandContext, values: dict[str, Any]) -> InteractionResponse:
+    action, name = str(values["action"]), str(values.get("name", "")).strip()
+    if action != "list" and not name:
+        return private_reply(f"Give the `name` of the type to {action}.")
+    try:
+        match action:
+            case "add":
+                listed = await types(ctx).add(ctx.guild_id, name)
+                done = f"Added **{' '.join(name.split())}**. Event types now"
+            case "remove":
+                listed = await types(ctx).remove(ctx.guild_id, name, ctx.now)
+                done = (
+                    f"Removed **{name}**. Events that use it keep it. Event types now"
+                )
+            case _:
+                listed = await types(ctx).listed(ctx.guild_id)
+                done = "This server's event types"
+    except EventInputError as error:
+        return private_reply(str(error))
+    names = ", ".join(t.name for t in listed) or "none yet. Add one with `action:add`"
+    return private_reply(f"{done}: {names}")
+
+
 async def setup_line(ctx: CommandContext) -> str:
     """What `/wgm setup` says about the event channel."""
     channel_id = (await guilds(ctx).for_guild(ctx.guild_id)).event_channel_id
@@ -404,7 +453,7 @@ SUBCOMMANDS = (
         (ADMIN_ROLE,),
         [
             text("title", "What the event is called", max_length=100),
-            choice("type", "Kind of event", EVENT_TYPES),
+            text("type", "Kind of event, from this server's list", autocomplete=True),
             text("date", "Day, like 2026-12-05"),
             text("time", "24-hour start time in the guild's time zone, like 20:00"),
             _minutes(
@@ -420,6 +469,7 @@ SUBCOMMANDS = (
                 )
             ),
         ],
+        suggest=suggest,
     ),
     Subcommand(
         ("event", "edit"),
@@ -429,7 +479,7 @@ SUBCOMMANDS = (
         [
             EVENT_OPTION,
             _optional(text("title", "New title", max_length=100)),
-            _optional(choice("type", "New kind of event", EVENT_TYPES)),
+            _optional(text("type", "New kind of event", autocomplete=True)),
             _optional(text("date", "New day, like 2026-12-05")),
             _optional(text("time", "New 24-hour start time, like 20:00")),
             _minutes(
@@ -445,7 +495,7 @@ SUBCOMMANDS = (
                 )
             ),
         ],
-        suggest=suggest_events,
+        suggest=suggest,
     ),
     Subcommand(
         ("event", "cancel"),
@@ -453,7 +503,7 @@ SUBCOMMANDS = (
         _cancel,
         (ADMIN_ROLE,),
         [EVENT_OPTION],
-        suggest=suggest_events,
+        suggest=suggest,
     ),
     Subcommand(
         ("event", "delete"),
@@ -480,7 +530,7 @@ SUBCOMMANDS = (
                 text("class", "Their class, such as Crusader", autocomplete=True)
             ),
         ],
-        suggest=suggest_event_or_class,
+        suggest=suggest,
     ),
     Subcommand(
         ("event", "remove"),
@@ -488,7 +538,25 @@ SUBCOMMANDS = (
         _remove,
         (ADMIN_ROLE,),
         [EVENT_OPTION, user("member", "Who to take off")],
-        suggest=suggest_events,
+        suggest=suggest,
+    ),
+    Subcommand(
+        ("event", "types"),
+        "List, add or remove this server's kinds of event",
+        _types,
+        (ADMIN_ROLE,),
+        [
+            choice("action", "What to do", TYPE_ACTIONS),
+            _optional(
+                text(
+                    "name",
+                    "The type to add or remove, such as Siege",
+                    max_length=32,
+                    autocomplete=True,
+                )
+            ),
+        ],
+        suggest=suggest,
     ),
     Subcommand(("event", "list"), "List upcoming events", _list),
     Subcommand(

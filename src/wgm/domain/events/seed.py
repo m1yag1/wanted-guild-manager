@@ -9,12 +9,13 @@ from typing import Any
 
 from attrs import frozen
 
-from wgm.db.models import Event, Signup, SignupStatus
+from wgm.db.models import Event, EventType, Signup, SignupStatus
 from wgm.domain.discord.context import CommandContext, Subcommand
 from wgm.domain.discord.options import choice
 from wgm.domain.discord.permissions import ADMIN_ROLE
 from wgm.domain.discord.schemas import InteractionResponse
 from wgm.domain.events.commands import post_event
+from wgm.domain.events.services import EventTypeService
 from wgm.domain.events.sharks import shark_fact
 
 ROSTER = [
@@ -60,7 +61,9 @@ PRESETS = {
 }
 
 
-def test_event(preset: Preset, ctx: CommandContext, now: datetime) -> Event:
+def test_event(
+    preset: Preset, ctx: CommandContext, now: datetime, event_type: EventType
+) -> Event:
     """A test event for a preset, starting relative to `now`.
 
     Its type is Test, so the post reads like "[Test] Busy roster".
@@ -69,7 +72,7 @@ def test_event(preset: Preset, ctx: CommandContext, now: datetime) -> Event:
     event = Event(
         guild_id=ctx.guild_id,
         title=preset.title,
-        event_type="Test",
+        event_type=event_type,
         description=preset.description,
         shark_fact=shark_fact(),
         starts_at=starts_at,
@@ -98,7 +101,10 @@ def test_event(preset: Preset, ctx: CommandContext, now: datetime) -> Event:
 
 async def _seed(ctx: CommandContext, values: dict[str, Any]) -> InteractionResponse:
     preset = PRESETS[str(values["preset"])]
-    return await post_event(ctx, test_event(preset, ctx, ctx.now))
+    event_type = await EventTypeService(session=ctx.session).for_tests(
+        ctx.guild_id, ctx.now
+    )
+    return await post_event(ctx, test_event(preset, ctx, ctx.now, event_type))
 
 
 DEV_SUBCOMMANDS = (

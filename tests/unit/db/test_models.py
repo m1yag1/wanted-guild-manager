@@ -28,7 +28,6 @@ async def test_events_keep_their_signups_and_delete_them(
         event = Event(
             guild_id="1",
             title="Siege night",
-            event_type="Siege",
             starts_at=STARTS,
             created_by="42",
         )

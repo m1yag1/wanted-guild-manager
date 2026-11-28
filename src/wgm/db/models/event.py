@@ -25,6 +25,25 @@ class SignupStatus(StrEnum):
     """Can't make it; tracked so managers know who answered."""
 
 
+class EventType(UUIDAuditBase):
+    """A kind of event a server runs, such as Siege. Admins manage the list.
+
+    Rows without a server are the starter list, added by a migration. A server
+    gets its own copy of them the first time it needs its types.
+    """
+
+    __tablename__ = "event_type"
+    __table_args__ = (UniqueConstraint("guild_id", "name"),)
+
+    guild_id: Mapped[str | None] = mapped_column(String(32), index=True)
+    """None for the starter rows that new servers copy."""
+    name: Mapped[str] = mapped_column(String(32))
+    archived_at: Mapped[datetime | None] = mapped_column(
+        DateTimeUTC(timezone=True), default=None
+    )
+    """When an admin removed it from the list. Events that use it keep it."""
+
+
 class Event(UUIDAuditBase):
     """A PvX event in one Discord server."""
 
@@ -33,8 +52,11 @@ class Event(UUIDAuditBase):
     guild_id: Mapped[str] = mapped_column(String(32), index=True)
     """Discord server the event belongs to."""
     title: Mapped[str] = mapped_column(String(100))
-    event_type: Mapped[str] = mapped_column(String(32))
-    """Siege, Boonstone, Riftstone, Archboss, Guild Raid, Arena or Other."""
+    event_type_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("event_type.id", ondelete="SET NULL"), default=None
+    )
+    event_type: Mapped[EventType | None] = relationship(lazy="selectin")
+    """Its kind of event, such as Siege."""
     starts_at: Mapped[datetime] = mapped_column(DateTimeUTC(timezone=True))
     description: Mapped[str | None] = mapped_column(String(200), default=None)
     """A line from the admin under the title, such as who we're fighting."""
@@ -64,6 +86,11 @@ class Event(UUIDAuditBase):
     but the row and its sign ups are kept."""
     deleted_by: Mapped[str | None] = mapped_column(String(32), default=None)
     """Discord user ID of the admin who deleted it."""
+
+    @property
+    def type_name(self) -> str:
+        """Its kind of event's name, such as Siege."""
+        return self.event_type.name if self.event_type else "Event"
 
     signups: Mapped[list["Signup"]] = relationship(
         back_populates="event",

@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
-from wgm.db.models import Event, Signup, SignupStatus
+from wgm.db.models import Event, EventType, Signup, SignupStatus
 from wgm.domain.events.roster import (
     CANCELLED,
     CLOSED,
@@ -29,7 +29,7 @@ def _event() -> Event:
         id=uuid4(),
         guild_id="1",
         title="Siege night",
-        event_type="Siege",
+        event_type=EventType(guild_id="1", name="Siege"),
         starts_at=STARTS,
         closes_at=CLOSES,
         created_by="42",

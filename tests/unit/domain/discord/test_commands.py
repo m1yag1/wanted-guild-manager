@@ -27,6 +27,7 @@ def test_wgm_groups_event_subcommands() -> None:
         "delete",
         "add",
         "remove",
+        "types",
         "list",
         "channel",
         "close-time",
@@ -35,11 +36,12 @@ def test_wgm_groups_event_subcommands() -> None:
     assert [o["name"] for o in top["config"]["options"]] == ["show"]
 
 
-def test_event_create_offers_the_event_types() -> None:
+def test_event_types_are_suggested_not_fixed() -> None:
     create = next(sub for sub in SUBCOMMANDS if sub.path == ("event", "create"))
-    kinds = next(o for o in create.options if o["name"] == "type")["choices"]
+    kind = next(o for o in create.options if o["name"] == "type")
 
-    assert [kind["value"] for kind in kinds][:2] == ["Siege", "Boonstone"]
+    assert kind["autocomplete"] is True
+    assert "choices" not in kind
     assert create.allowed_roles == ("wgm-admin",)
 
 
