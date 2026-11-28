@@ -63,6 +63,16 @@ def _last_post(api: FakeDiscordApi) -> dict[str, Any]:
     return body
 
 
+def _last_edit(api: FakeDiscordApi) -> str:
+    """The text of the last edit to an event post."""
+    edits = [
+        r
+        for r in api.requests
+        if r.method == "PATCH" and r.path.startswith("/channels")
+    ]
+    return str(edits[-1].body["content"])
+
+
 async def _event_id(
     interact: Interact, api: FakeDiscordApi, wgm_command: MakeCommand
 ) -> str:
@@ -129,17 +139,21 @@ async def test_buttons_sign_up_change_and_remove(
     event_id = await _event_id(interact, roles, wgm_command)
 
     tank = await interact(wgm_button(f"signup:{event_id}:tank"))
+    tank_post = _last_edit(roles)
     other = await interact(
         wgm_button(f"signup:{event_id}:tentative", user_id="2", nick=None)
     )
-    healer = await interact(wgm_button(f"signup:{event_id}:healer"))
+    await interact(wgm_button(f"signup:{event_id}:healer"))
+    healer = _last_edit(roles)
     removed = await interact(wgm_button(f"signup:{event_id}:healer"))
 
-    assert tank["type"] == 7
-    assert "Tank (1): Kael" in _content(tank)
+    assert tank["type"] == 4
+    assert tank["data"]["flags"] == 64
+    assert _content(tank).startswith("You're down as **Tank**")
+    assert "Tank (1): Kael" in tank_post
     assert "**Tentative (1)**: Mason" in _content(other)
-    assert "Tank (0): -" in _content(healer)
-    assert "Healer (1): Kael" in _content(healer)
+    assert "Tank (0): -" in healer
+    assert "Healer (1): Kael" in healer
     assert "**Attending (0)**" in _content(removed)
     assert "**Tentative (1)**: Mason" in _content(removed)
     assert removed["data"]["components"][0]["components"][0]["label"] == "Tank"

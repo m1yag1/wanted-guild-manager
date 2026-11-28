@@ -2,6 +2,7 @@
 
 from wgm.db.models.event import (
     Event,
+    MemberClass,
     Signup,
     SignupAction,
     SignupChange,
@@ -12,6 +13,7 @@ from wgm.db.models.guild import DEFAULT_CLOSE_MINUTES, GuildSettings
 __all__ = [
     "DEFAULT_CLOSE_MINUTES",
     "Event",
+    "MemberClass",
     "GuildSettings",
     "Signup",
     "SignupAction",

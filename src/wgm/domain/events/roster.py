@@ -72,14 +72,16 @@ def heading(event: Event) -> str:
     return f"**{event.title}** · {event.event_type}\n{when(event.starts_at)}"
 
 
+def _name(signup: Signup) -> str:
+    """Kael, Kael (Crusader), Kael (late) or Kael (Crusader, late)."""
+    notes = [
+        note for note in (signup.class_name, "late" if signup.late else "") if note
+    ]
+    return signup.character_name + (f" ({', '.join(notes)})" if notes else "")
+
+
 def _names(signups: list[Signup]) -> str:
-    return (
-        ", ".join(
-            signup.character_name + (" (late)" if signup.late else "")
-            for signup in signups
-        )
-        or "-"
-    )
+    return ", ".join(_name(signup) for signup in signups) or "-"
 
 
 def reasons(event: Event) -> str:

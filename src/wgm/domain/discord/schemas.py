@@ -96,6 +96,8 @@ class InteractionData(msgspec.Struct):
     components: list[FormField] = []
     """A submitted form's rows of fields."""
     resolved: Resolved = msgspec.field(default_factory=Resolved)
+    values: list[str] = []
+    """What was picked in a dropdown."""
 
     def field(self, custom_id: str) -> str:
         """The text typed in a submitted form's field, or ""."""

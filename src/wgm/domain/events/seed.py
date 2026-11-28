@@ -17,18 +17,18 @@ from wgm.domain.discord.schemas import InteractionResponse
 from wgm.domain.events.commands import post_event
 
 ROSTER = [
-    ("Kael", SignupStatus.ATTENDING, "Tank", None),
-    ("Brask", SignupStatus.ATTENDING, "Tank", None),
-    ("Mira", SignupStatus.ATTENDING, "Healer", None),
-    ("Rook", SignupStatus.ATTENDING, "Healer", None),
-    ("Lyra", SignupStatus.ATTENDING, "DPS", None),
-    ("Thorn", SignupStatus.ATTENDING, "DPS", None),
-    ("Sable", SignupStatus.ATTENDING, "DPS", None),
-    ("Orin", SignupStatus.ATTENDING, "DPS", None),
-    ("Ash", SignupStatus.TENTATIVE, None, None),
-    ("Juno", SignupStatus.TENTATIVE, None, None),
-    ("Vex", SignupStatus.NOT_ATTENDING, None, "Working late"),
-    ("Nyx", SignupStatus.NOT_ATTENDING, None, None),
+    ("Kael", SignupStatus.ATTENDING, "Tank", None, "Crusader"),
+    ("Brask", SignupStatus.ATTENDING, "Tank", None, "Guardian"),
+    ("Mira", SignupStatus.ATTENDING, "Healer", None, "Seeker"),
+    ("Rook", SignupStatus.ATTENDING, "Healer", None, "Oracle"),
+    ("Lyra", SignupStatus.ATTENDING, "DPS", None, "Mobilist"),
+    ("Thorn", SignupStatus.ATTENDING, "DPS", None, "Predator"),
+    ("Sable", SignupStatus.ATTENDING, "DPS", None, "Infiltrator"),
+    ("Orin", SignupStatus.ATTENDING, "DPS", None, "Liberator"),
+    ("Ash", SignupStatus.TENTATIVE, None, None, None),
+    ("Juno", SignupStatus.TENTATIVE, None, None, None),
+    ("Vex", SignupStatus.NOT_ATTENDING, None, "Working late", None),
+    ("Nyx", SignupStatus.NOT_ATTENDING, None, None, None),
 ]
 """Made-up members for the busy roster preset."""
 
@@ -76,8 +76,11 @@ def test_event(preset: Preset, ctx: CommandContext, now: datetime) -> Event:
                 status=status,
                 role=role,
                 reason=reason,
+                class_name=class_name,
             )
-            for n, (name, status, role, reason) in enumerate(ROSTER, start=1)
+            for n, (name, status, role, reason, class_name) in enumerate(
+                ROSTER, start=1
+            )
         )
     return event
 
