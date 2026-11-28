@@ -147,7 +147,11 @@ async def test_buttons_sign_up_change_and_remove(
     )
     await interact(wgm_button(f"signup:{event_id}:healer"))
     healer = _last_edit(roles)
-    removed = await interact(wgm_button(f"signup:{event_id}:healer"))
+    again = await interact(wgm_button(f"signup:{event_id}:healer"))
+    still = _last_edit(roles)
+    tentative = await interact(
+        wgm_button(f"signup:{event_id}:tentative", user_id="2", nick=None)
+    )
 
     assert tank["type"] == 4
     assert tank["data"]["flags"] == 64
@@ -156,9 +160,11 @@ async def test_buttons_sign_up_change_and_remove(
     assert "**Tentative (1)**: Mason" in post_words(other["data"])
     assert "🛡️ **Tanks (0)**\n-" in healer
     assert "💚 **Healers (1)**\nKael" in healer
-    assert "### Attending (0)" in post_words(removed["data"])
-    assert "**Tentative (1)**: Mason" in post_words(removed["data"])
-    assert post_buttons(removed["data"])[0]["label"] == "Healer"
+    # Pressing your answer again keeps you on the roster.
+    assert _content(again).startswith("You're down as **Healer**")
+    assert "💚 **Healers (1)**\nKael" in still
+    assert "**Tentative (1)**: Mason" in post_words(tentative["data"])
+    assert post_buttons(tentative["data"])[0]["label"] == "Healer"
 
 
 @pytest.mark.anyio

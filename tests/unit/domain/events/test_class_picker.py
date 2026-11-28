@@ -123,13 +123,25 @@ async def test_other_classes_offer_off_role_picks(
     await interact(wgm_button(f"signup:{event_id}:dps"))
 
     more = await interact(wgm_button(f"class:more:{event_id}:DPS"))
-    tank, healer = (row[0] for row in _rows(more))
-    picked = await interact(wgm_button(healer["custom_id"], values=["Seeker"]))
+    (groups,) = _rows(more)
+    healers = await interact(wgm_button(groups[1]["custom_id"]))
+    dropdown, (back,) = _rows(healers)
+    went_back = await interact(wgm_button(back["custom_id"]))
+    picked = await interact(wgm_button(dropdown[0]["custom_id"], values=["Seeker"]))
     again = await interact(wgm_button(f"signup:{event_id}:tank", user_id="2"))
 
-    assert _content(more) == "Other classes, to bring as **DPS**:"
-    assert (len(tank["options"]), len(healer["options"])) == (12, 8)
-    assert tank["custom_id"] != healer["custom_id"]
+    assert more["type"] == 7
+    assert _content(more) == "Which role's classes? You'll still be down as **DPS**."
+    assert [b["label"] for b in groups] == [
+        "Tank classes",
+        "Healer classes",
+        "Back to DPS classes",
+    ]
+    assert _content(healers) == "Healer classes, to bring as **DPS**:"
+    assert len(dropdown[0]["options"]) == 8
+    assert sum(1 for row in _rows(healers) for c in row if c["type"] == 3) == 1
+    assert _content(went_back).startswith("You're down as **DPS**")
+    assert len(_rows(went_back)[0][0]["options"]) == 25
     assert _content(picked).startswith("You're down as **DPS** (Seeker)")
     assert "🗡️ **DPS (1)**\nKael (Seeker)" in _post(roles)
     assert again["type"] == 4
