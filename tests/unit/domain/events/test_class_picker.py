@@ -8,7 +8,14 @@ from uuid import UUID
 import pytest
 
 from tests.fixtures.app import Interact
-from tests.fixtures.discord import ADMIN_ROLE_ID, GUILD_ID, MakeButton, MakeCommand
+from tests.fixtures.discord import (
+    ADMIN_ROLE_ID,
+    GUILD_ID,
+    MakeButton,
+    MakeCommand,
+    post_buttons,
+    post_words,
+)
 from tests.fixtures.discord_api import FakeDiscordApi
 from wgm.db.config import database_config
 from wgm.domain.events.services import EventService
@@ -37,7 +44,7 @@ def _post(api: FakeDiscordApi) -> str:
         for r in api.requests
         if r.method == "PATCH" and r.path.startswith("/channels")
     ]
-    return str(edits[-1].body["content"])
+    return post_words(edits[-1].body)
 
 
 def _rows(reply: dict[str, Any]) -> list[list[dict[str, Any]]]:
@@ -49,7 +56,7 @@ async def _create(
 ) -> str:
     await interact(wgm_command("event create", **ADMIN, **EVENT))
     post = [r for r in api.requests if r.method == "POST"][-1].body
-    return str(post["components"][0]["components"][0]["custom_id"].split(":")[1])
+    return str(post_buttons(post)[0]["custom_id"].split(":")[1])
 
 
 @pytest.mark.anyio
@@ -72,7 +79,7 @@ async def test_first_time_members_pick_from_their_roles_classes(
     assert picked["type"] == 7
     assert _content(picked) == "You're down as **Tank** (Crusader) for **Siege night**."
     assert picked["data"]["components"] == []
-    assert "Tank (1): Kael (Crusader)" in _post(roles)
+    assert "🛡️ **Tanks (1)**\nKael (Crusader)" in _post(roles)
 
 
 @pytest.mark.anyio
@@ -100,9 +107,9 @@ async def test_returning_members_confirm_their_last_class(
         "default": True,
     }
     assert [b["label"] for b in buttons] == ["Confirm Crusader", "Other classes"]
-    assert "Tank (1): Kael\n" in before
+    assert "🛡️ **Tanks (1)**\nKael\n" in before
     assert _content(confirmed).startswith("You're down as **Tank** (Crusader)")
-    assert "Tank (1): Kael (Crusader)" in _post(roles)
+    assert "🛡️ **Tanks (1)**\nKael (Crusader)" in _post(roles)
 
 
 @pytest.mark.anyio
@@ -124,7 +131,7 @@ async def test_other_classes_offer_off_role_picks(
     assert (len(tank["options"]), len(healer["options"])) == (12, 8)
     assert tank["custom_id"] != healer["custom_id"]
     assert _content(picked).startswith("You're down as **DPS** (Seeker)")
-    assert "DPS (1): Kael (Seeker)" in _post(roles)
+    assert "🗡️ **DPS (1)**\nKael (Seeker)" in _post(roles)
     assert again["type"] == 4
 
 
@@ -144,7 +151,7 @@ async def test_switching_roles_clears_the_class_and_old_dropdowns_say_so(
         wgm_button(f"class:pick:{event_id}:Tank:0", values=["Warden"])
     )
 
-    assert "Healer (1): Kael\n" in _post(roles)
+    assert "💚 **Healers (1)**\nKael\n" in _post(roles)
     assert _content(stale) == "You're not down as Tank for **Siege night** anymore."
 
 
@@ -226,7 +233,7 @@ async def test_admins_can_add_members_with_a_class(
     )
 
     assert _content(added) == "Put **Lyra** down as DPS (Mobilist) for **Siege night**."
-    assert "DPS (1): Lyra (Mobilist)" in _post(roles)
+    assert "🗡️ **DPS (1)**\nLyra (Mobilist)" in _post(roles)
     assert _content(tentative).startswith("Pick a class from the list")
     assert _content(unknown).startswith("Pick a class from the list")
 

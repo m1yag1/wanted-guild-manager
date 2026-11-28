@@ -13,6 +13,8 @@ from tests.fixtures.discord import (
     GUILD_ID,
     MakeButton,
     MakeCommand,
+    post_buttons,
+    post_words,
 )
 from tests.fixtures.discord_api import FakeDiscordApi
 from wgm.db.config import database_config
@@ -70,14 +72,14 @@ def _last_edit(api: FakeDiscordApi) -> str:
         for r in api.requests
         if r.method == "PATCH" and r.path.startswith("/channels")
     ]
-    return str(edits[-1].body["content"])
+    return post_words(edits[-1].body)
 
 
 async def _event_id(
     interact: Interact, api: FakeDiscordApi, wgm_command: MakeCommand
 ) -> str:
     await interact(wgm_command("event create", **ADMIN, **EVENT))
-    custom_id = _last_post(api)["components"][0]["components"][0]["custom_id"]
+    custom_id = post_buttons(_last_post(api))[0]["custom_id"]
     return str(custom_id.split(":")[1])
 
 
@@ -115,8 +117,8 @@ async def test_events_post_in_the_configured_channel(
     assert _content(created) == f"Posted **Siege night** in <#{CHANNEL}>."
     post = next(r for r in roles.requests if r.method == "POST")
     assert post.path == f"/channels/{CHANNEL}/messages"
-    assert post.body["content"].startswith("**Siege night**")
-    assert post.body["components"][0]["components"][2]["label"] == "DPS"
+    assert post_words(post.body).startswith("## 🦈 [Siege] Siege night\n🕗 <t:")
+    assert post_buttons(post.body)[2]["label"] == "DPS"
     assert post.body["allowed_mentions"] == {"parse": []}
 
 
@@ -150,13 +152,13 @@ async def test_buttons_sign_up_change_and_remove(
     assert tank["type"] == 4
     assert tank["data"]["flags"] == 64
     assert _content(tank).startswith("You're down as **Tank**")
-    assert "Tank (1): Kael" in tank_post
-    assert "**Tentative (1)**: Mason" in _content(other)
-    assert "Tank (0): -" in healer
-    assert "Healer (1): Kael" in healer
-    assert "**Attending (0)**" in _content(removed)
-    assert "**Tentative (1)**: Mason" in _content(removed)
-    assert removed["data"]["components"][0]["components"][0]["label"] == "Tank"
+    assert "🛡️ **Tanks (1)**\nKael" in tank_post
+    assert "**Tentative (1)**: Mason" in post_words(other["data"])
+    assert "🛡️ **Tanks (0)**\n-" in healer
+    assert "💚 **Healers (1)**\nKael" in healer
+    assert "### Attending (0)" in post_words(removed["data"])
+    assert "**Tentative (1)**: Mason" in post_words(removed["data"])
+    assert post_buttons(removed["data"])[0]["label"] == "Healer"
 
 
 @pytest.mark.anyio
@@ -268,8 +270,8 @@ async def test_setup_checks_the_event_channel(
 
 
 def _closes(post: dict[str, Any]) -> str:
-    content = str(post["content"])
-    return next(line for line in content.splitlines() if line.startswith("Sign-ups"))
+    lines = post_words(post).splitlines()
+    return next(line for line in lines if line.startswith("🔒 Sign-ups"))[2:]
 
 
 def _stamp(moment: datetime) -> int:

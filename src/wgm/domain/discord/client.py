@@ -20,9 +20,13 @@ class DiscordApiError(RuntimeError):
         self.status = status
 
 
-def _message(content: str, components: list[dict[str, Any]]) -> dict[str, Any]:
+IS_COMPONENTS_V2 = 1 << 15
+
+
+def _message(components: list[dict[str, Any]]) -> dict[str, Any]:
+    """A message built from layout components, which never pings anyone."""
     return {
-        "content": content,
+        "flags": IS_COMPONENTS_V2,
         "components": components,
         "allowed_mentions": {"parse": []},
     }
@@ -96,13 +100,13 @@ class DiscordClient:
         return str(role["id"])
 
     async def post_message(
-        self, channel_id: str, content: str, components: list[dict[str, Any]]
+        self, channel_id: str, components: list[dict[str, Any]]
     ) -> str:
         """Post a message in a channel and return its ID."""
         message = await self._call(
             "POST",
             f"/channels/{channel_id}/messages",
-            _message(content, components),
+            _message(components),
         )
         return str(message["id"])
 
@@ -110,14 +114,13 @@ class DiscordClient:
         self,
         channel_id: str,
         message_id: str,
-        content: str,
         components: list[dict[str, Any]],
     ) -> None:
-        """Replace the text and buttons of a message the app posted."""
+        """Replace the components of a message the app posted."""
         await self._call(
             "PATCH",
             f"/channels/{channel_id}/messages/{message_id}",
-            _message(content, components),
+            _message(components),
         )
 
     async def delete_message(self, channel_id: str, message_id: str) -> None:

@@ -6,7 +6,14 @@ import pytest
 from attrs import evolve
 
 from tests.fixtures.app import Interact
-from tests.fixtures.discord import ADMIN_ROLE_ID, GUILD_ID, MakeButton, MakeCommand
+from tests.fixtures.discord import (
+    ADMIN_ROLE_ID,
+    GUILD_ID,
+    MakeButton,
+    MakeCommand,
+    post_buttons,
+    post_words,
+)
 from tests.fixtures.discord_api import FakeDiscordApi
 from wgm.lib.settings import Settings
 
@@ -43,7 +50,7 @@ def _post_edits(api: FakeDiscordApi) -> list[Any]:
 
 
 def _disabled(post: dict[str, Any]) -> list[bool]:
-    return [b["disabled"] for b in post["components"][0]["components"]]
+    return [b["disabled"] for b in post_buttons(post)]
 
 
 @pytest.mark.anyio
@@ -53,20 +60,20 @@ async def test_seed_posts_each_preset(
     posts = {}
     for preset in ("closes-soon", "closed", "busy", "old-style"):
         reply = await interact(wgm_command("event seed", preset=preset, **ADMIN))
-        assert reply["data"]["content"].startswith("Posted **[test] ")
+        assert reply["data"]["content"].startswith("Posted **")
         posts[preset] = _post(roles)
     listed = await interact(wgm_command("event list"))
 
-    assert "Sign-ups close <t:" in posts["closes-soon"]["content"]
+    assert "🔒 Sign-ups close <t:" in post_words(posts["closes-soon"])
     assert not any(_disabled(posts["closes-soon"]))
-    assert "Sign-ups closed <t:" in posts["closed"]["content"]
+    assert "🔒 Sign-ups closed <t:" in post_words(posts["closed"])
     assert all(_disabled(posts["closed"]))
     assert (
-        "DPS (4): Lyra (Mobilist), Thorn (Predator), Sable (Infiltrator), "
-        "Orin (Liberator)" in posts["busy"]["content"]
+        "🗡️ **DPS (4)**\nLyra (Mobilist), Thorn (Predator), Sable (Infiltrator), "
+        "Orin (Liberator)" in post_words(posts["busy"])
     )
-    assert "**Not attending (2)**: Vex, Nyx" in posts["busy"]["content"]
-    assert "[test] Old style" in posts["old-style"]["content"]
+    assert "**Not attending (2)**: Vex, Nyx" in post_words(posts["busy"])
+    assert "## 🦈 [Test] Old style\n" in post_words(posts["old-style"])
     assert "Attending 8 · Tentative 2 · Not attending 2" in listed["data"]["content"]
 
 
@@ -78,13 +85,12 @@ async def test_members_can_press_buttons_on_a_busy_test_event(
     roles: FakeDiscordApi,
 ) -> None:
     await interact(wgm_command("event seed", preset="busy", **ADMIN))
-    custom_id = _post(roles)["components"][0]["components"][0]["custom_id"]
+    custom_id = post_buttons(_post(roles))[1]["custom_id"]  # Tank
 
     await interact(wgm_button(custom_id))
 
-    assert (
-        "Tank (3): Kael (Crusader), Brask (Guardian), Kael"
-        in (_post_edits(roles)[-1]["content"])
+    assert "🛡️ **Tanks (3)**\nKael (Crusader), Brask (Guardian), Kael" in post_words(
+        _post_edits(roles)[-1]
     )
 
 
@@ -112,7 +118,7 @@ async def test_a_closed_test_event_stays_locked_when_edited_or_reopens_when_move
 ) -> None:
     await interact(wgm_command("event seed", preset="closed", **ADMIN))
     post = _post(roles)
-    event_id = post["components"][0]["components"][0]["custom_id"].split(":")[1]
+    event_id = post_buttons(post)[0]["custom_id"].split(":")[1]
 
     await interact(wgm_command("event edit", event=event_id, title="Renamed", **ADMIN))
     renamed = _post_edits(roles)[-1]
@@ -121,7 +127,7 @@ async def test_a_closed_test_event_stays_locked_when_edited_or_reopens_when_move
     )
     moved = _post_edits(roles)[-1]
 
-    assert "Sign-ups closed <t:" in renamed["content"]
+    assert "🔒 Sign-ups closed <t:" in post_words(renamed)
     assert all(_disabled(renamed))
-    assert "Sign-ups close <t:" in moved["content"]
+    assert "🔒 Sign-ups close <t:" in post_words(moved)
     assert not any(_disabled(moved))

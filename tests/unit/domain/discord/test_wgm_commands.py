@@ -11,6 +11,8 @@ from tests.fixtures.discord import (
     MANAGE_SERVER,
     LoadPayload,
     MakeCommand,
+    post_buttons,
+    post_words,
 )
 from tests.fixtures.discord_api import FakeDiscordApi
 
@@ -83,9 +85,9 @@ async def test_admins_post_events_and_everyone_can_list_them(
     # No event channel set: it posts in the channel the command ran in.
     assert _content(posted) == "Posted **Siege night** in <#1290000000000000001>."
     assert _private(posted)
-    assert post["content"].startswith("**Siege night** · Siege\n<t:")
-    assert "**Attending (0)**" in post["content"]
-    assert post["components"][0]["components"][0]["label"] == "Tank"
+    assert post_words(post).startswith("## 🦈 [Siege] Siege night\n🕗 <t:")
+    assert "### Attending (0)" in post_words(post)
+    assert post_buttons(post)[0]["label"] == "Healer"
     assert post["allowed_mentions"] == {"parse": []}
     assert _private(listed)
     assert _content(listed).startswith("**Siege night** · Siege\n<t:")

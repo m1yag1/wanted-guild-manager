@@ -1,13 +1,18 @@
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import uuid4
 
 from wgm.db.models import Event, Signup, SignupStatus
 from wgm.domain.events.roster import (
+    CANCELLED,
+    CLOSED,
+    OPEN,
     buttons,
     closing_line,
-    event_post,
+    post_components,
+    post_text,
     reasons,
-    roster,
+    roster_blocks,
     tally,
     when,
 )
@@ -50,23 +55,53 @@ def test_tally_counts_each_answer() -> None:
     assert tally(_event()) == "Attending 3 · Tentative 1 · Not attending 1"
 
 
-def test_roster_groups_like_the_signup_sheet() -> None:
-    assert roster(_event()) == (
-        "**Attending (3)**\n"
-        "Tank (1): Kael\n"
-        "Healer (2): Mira, Rook\n"
-        "DPS (0): -\n"
-        "**Tentative (1)**: Ash\n"
-        "**Not attending (1)**: Vex"
-    )
+def test_roster_groups_by_role() -> None:
+    attending, others = roster_blocks(_event())
+
+    assert attending == [
+        "### Attending (3)",
+        "💚 **Healers (2)**\nMira, Rook",
+        "🛡️ **Tanks (1)**\nKael",
+        "🗡️ **DPS (0)**\n-",
+    ]
+    assert others == ("❔ **Tentative (1)**: Ash\n🚫 **Not attending (1)**: Vex")
 
 
-def test_post_has_heading_then_roster() -> None:
-    post = event_post(_event(), BEFORE)
+def _box(event: Event, now: datetime) -> dict[str, Any]:
+    (box,) = post_components(event, now)
+    return box
 
-    assert post.startswith("**Siege night** · Siege\n<t:")
-    assert f"\nSign-ups close <t:{int(CLOSES.timestamp())}:R>\n\n" in post
-    assert "\n\n**Attending (3)**" in post
+
+def test_the_post_is_one_box_with_the_shark_title_and_buttons_inside() -> None:
+    box = _box(_event(), BEFORE)
+    text = post_text([box])
+
+    assert box["type"] == 17
+    assert box["accent_color"] == OPEN
+    assert text.startswith("## 🦈 [Siege] Siege night\n🕗 <t:")
+    assert f"🔒 Sign-ups close <t:{int(CLOSES.timestamp())}:R>" in text
+    assert text.endswith("-# Attending 3 · Tentative 1 · Not attending 1")
+    rows = [c for c in box["components"] if c["type"] == 1]
+    assert [b["label"] for b in rows[0]["components"]][:3] == [
+        "Healer",
+        "Tank",
+        "DPS",
+    ]
+    gaps = [c for c in box["components"] if c["type"] == 14 and not c["divider"]]
+    assert len(gaps) == 3
+
+
+def test_the_box_turns_grey_when_closed_and_red_when_cancelled() -> None:
+    event = _event()
+    closed = _box(event, CLOSES)
+    event.cancelled_at = BEFORE
+    cancelled = _box(event, BEFORE)
+
+    assert closed["accent_color"] == CLOSED
+    assert "🔒 Sign-ups closed" in post_text([closed])
+    assert cancelled["accent_color"] == CANCELLED
+    assert "❌ **Cancelled**" in post_text([cancelled])
+    assert not [c for c in cancelled["components"] if c["type"] == 1]
 
 
 def test_buttons_carry_the_event_and_choice() -> None:
@@ -74,13 +109,13 @@ def test_buttons_carry_the_event_and_choice() -> None:
     row = buttons(event, BEFORE)[0]["components"]
 
     assert [b["label"] for b in row] == [
-        "Tank",
         "Healer",
+        "Tank",
         "DPS",
         "Tentative",
         "Not attending",
     ]
-    assert row[0]["custom_id"] == f"signup:{event.id}:tank"
+    assert row[0]["custom_id"] == f"signup:{event.id}:healer"
     assert row[-1]["style"] == 4
     assert not any(b["disabled"] for b in row)
 
@@ -116,4 +151,4 @@ def test_late_changes_are_marked() -> None:
     event = _event()
     event.signups[0].late = True
 
-    assert "Tank (1): Kael (late)" in roster(event)
+    assert "🛡️ **Tanks (1)**\nKael (late)" in roster_blocks(event)[0]

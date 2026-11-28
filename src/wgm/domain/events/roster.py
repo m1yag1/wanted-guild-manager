@@ -1,11 +1,17 @@
-"""How an event looks in Discord: the post text, the roster and its buttons."""
+"""How an event looks in Discord: the post, its roster and its buttons.
+
+The post is one Components V2 container: a colored box holding the title,
+times, roster by role, the buttons and a tally.
+See https://discord.com/developers/docs/components/reference
+"""
 
 from datetime import datetime
 from typing import Any
 
 from wgm.db.models import Event, Signup, SignupStatus
 
-ATTENDING_ROLES = ("Tank", "Healer", "DPS")
+ATTENDING_ROLES = ("Healer", "Tank", "DPS")
+"""Roster and button order: healers first, as the guild plans around them."""
 
 # Button id -> (status, role). The id is sent back when the button is pressed.
 CHOICES: dict[str, tuple[SignupStatus, str | None]] = {
@@ -16,14 +22,18 @@ CHOICES: dict[str, tuple[SignupStatus, str | None]] = {
     "not_attending": (SignupStatus.NOT_ATTENDING, None),
 }
 BUTTON_LABELS = {
-    "tank": "Tank",
     "healer": "Healer",
+    "tank": "Tank",
     "dps": "DPS",
     "tentative": "Tentative",
     "not_attending": "Not attending",
 }
 PRIMARY, SECONDARY, DANGER = 1, 2, 4
 BUTTON_STYLES = {"tentative": SECONDARY, "not_attending": DANGER}
+ACTION_ROW, TEXT, SEPARATOR, CONTAINER = 1, 10, 14, 17
+OPEN, CLOSED, CANCELLED = 0x3B82F6, 0x6B7280, 0xEF4444
+"""The box's edge: blue while open, grey once closed, red when cancelled."""
+ROLE_HEADINGS = {"Tank": "🛡️ **Tanks", "Healer": "💚 **Healers", "DPS": "🗡️ **DPS"}
 
 
 def when(moment: datetime) -> str:
@@ -95,39 +105,12 @@ def reasons(event: Event) -> str:
     return f"Not attending: {names}"
 
 
-def roster(event: Event) -> str:
-    """Who answered, grouped the way the sign-up sheet is."""
-    attending = [s for s in event.signups if s.status is SignupStatus.ATTENDING]
-    lines = [f"**Attending ({len(attending)})**"]
-    for role in ATTENDING_ROLES:
-        members = [s for s in attending if s.role == role]
-        lines.append(f"{role} ({len(members)}): {_names(members)}")
-    for status, label in (
-        (SignupStatus.TENTATIVE, "Tentative"),
-        (SignupStatus.NOT_ATTENDING, "Not attending"),
-    ):
-        members = [s for s in event.signups if s.status is status]
-        lines.append(f"**{label} ({len(members)})**: {_names(members)}")
-    return "\n".join(lines)
-
-
-def event_post(event: Event, now: datetime) -> str:
-    """The full post: heading and closing time (or Cancelled), then the roster."""
-    status = "**Cancelled**" if event.cancelled_at else closing_line(event, now)
-    return f"{heading(event)}\n{status}\n\n{roster(event)}"
-
-
 def buttons(event: Event, now: datetime) -> list[dict[str, Any]]:
-    """One row of sign-up buttons for the post, greyed out once closed.
-
-    A cancelled event has no buttons.
-    """
-    if event.cancelled_at:
-        return []
+    """One row of sign-up buttons for the post, greyed out once closed."""
     closed = is_closed(event, now)
     return [
         {
-            "type": 1,  # action row
+            "type": ACTION_ROW,
             "components": [
                 {
                     "type": 2,  # button
@@ -140,3 +123,70 @@ def buttons(event: Event, now: datetime) -> list[dict[str, Any]]:
             ],
         }
     ]
+
+
+def _text(content: str) -> dict[str, Any]:
+    return {"type": TEXT, "content": content}
+
+
+def _divider(*, large: bool = False) -> dict[str, Any]:
+    return {"type": SEPARATOR, "divider": True, "spacing": 2 if large else 1}
+
+
+def _gap() -> dict[str, Any]:
+    """Blank space between roster sections, without a line."""
+    return {"type": SEPARATOR, "divider": False, "spacing": 2}
+
+
+def status_line(event: Event, now: datetime) -> str:
+    """When it starts, and whether sign-ups are open, closed or cancelled."""
+    if event.cancelled_at:
+        return f"🕗 {when(event.starts_at)}\n❌ **Cancelled**"
+    return f"🕗 {when(event.starts_at)}\n🔒 {closing_line(event, now)}"
+
+
+def roster_blocks(event: Event) -> tuple[list[str], str]:
+    """The Attending heading and one section per role, then everyone else."""
+    attending = [s for s in event.signups if s.status is SignupStatus.ATTENDING]
+    sections = [f"### Attending ({len(attending)})"]
+    for role in ATTENDING_ROLES:
+        members = [s for s in attending if s.role == role]
+        sections.append(f"{ROLE_HEADINGS[role]} ({len(members)})**\n{_names(members)}")
+    others = []
+    for status, icon, label in (
+        (SignupStatus.TENTATIVE, "❔", "Tentative"),
+        (SignupStatus.NOT_ATTENDING, "🚫", "Not attending"),
+    ):
+        members = [s for s in event.signups if s.status is status]
+        others.append(f"{icon} **{label} ({len(members)})**: {_names(members)}")
+    return sections, "\n".join(others)
+
+
+def post_components(event: Event, now: datetime) -> list[dict[str, Any]]:
+    """The whole post, as one colored box."""
+    color = (
+        CANCELLED if event.cancelled_at else CLOSED if is_closed(event, now) else OPEN
+    )
+    attending, others = roster_blocks(event)
+    inside = [
+        _text(f"## 🦈 [{event.event_type}] {event.title}"),
+        _text(status_line(event, now)),
+        _divider(large=True),
+        _text(attending[0]),
+        *(part for section in attending[1:] for part in (_gap(), _text(section))),
+        _divider(large=True),
+        _text(others),
+        *([_divider(), *buttons(event, now)] if not event.cancelled_at else []),
+        _text(f"-# {tally(event)}"),
+    ]
+    return [{"type": CONTAINER, "accent_color": color, "components": inside}]
+
+
+def post_text(components: list[dict[str, Any]]) -> str:
+    """All the text in a post, top to bottom. Handy for logs and tests."""
+    lines: list[str] = []
+    for component in components:
+        if component.get("type") == TEXT:
+            lines.append(str(component["content"]))
+        lines.append(post_text(component.get("components", [])))
+    return "\n".join(line for line in lines if line)

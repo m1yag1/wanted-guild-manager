@@ -13,12 +13,13 @@ from wgm.domain.discord.schemas import (
     InteractionResponseType,
     Member,
     MessageData,
+    MessageFlags,
     ModalData,
     ModalResponse,
 )
 from wgm.domain.events.class_picker import class_prompt
 from wgm.domain.events.posts import open_event, update_post
-from wgm.domain.events.roster import CHOICES, buttons, event_post
+from wgm.domain.events.roster import CHOICES, post_components
 from wgm.domain.events.services import Answer, EventService
 
 REASON = "reason"
@@ -46,8 +47,8 @@ def redrawn(event: Event, ctx: CommandContext) -> InteractionResponse:
     return InteractionResponse(
         type=InteractionResponseType.UPDATE_MESSAGE,
         data=MessageData(
-            content=event_post(event, ctx.now),
-            components=buttons(event, ctx.now),
+            components=post_components(event, ctx.now),
+            flags=MessageFlags.IS_COMPONENTS_V2,
             allowed_mentions=NO_PINGS,
         ),
     )

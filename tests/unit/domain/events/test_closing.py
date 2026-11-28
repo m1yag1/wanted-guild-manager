@@ -8,6 +8,7 @@ import pytest
 from advanced_alchemy.alembic.commands import AlembicCommands
 from advanced_alchemy.extensions.litestar import SQLAlchemyAsyncConfig
 
+from tests.fixtures.discord import post_buttons, post_words
 from tests.fixtures.discord_api import FakeDiscordApi
 from wgm.db.config import database_config
 from wgm.db.models import Event
@@ -72,8 +73,8 @@ async def test_closed_posts_are_locked_once(
     assert (first, second) == (1, 0)
     edit = discord_api.requests[-1]
     assert (edit.method, edit.path) == ("PATCH", "/channels/7/messages/1")
-    assert "Sign-ups closed <t:" in edit.body["content"]
-    assert all(b["disabled"] for b in edit.body["components"][0]["components"])
+    assert "Sign-ups closed <t:" in post_words(edit.body)
+    assert all(b["disabled"] for b in post_buttons(edit.body))
     assert edit.body["allowed_mentions"] == {"parse": []}
     assert await _locked(config) == {"1": NOW, "2": None}
 
@@ -87,13 +88,15 @@ async def test_deleted_posts_stop_being_retried_and_other_errors_are(
     closed = NOW - timedelta(minutes=1)
     await _post(config, "1", closes_at=closed)
     await _post(config, "2", closes_at=closed)
+    await _post(config, "3", closes_at=closed)
     discord_api.responses["PATCH /channels/7/messages/1"] = (404, {"code": 10008})
     discord_api.responses["PATCH /channels/7/messages/2"] = (500, {})
+    discord_api.responses["PATCH /channels/7/messages/3"] = (400, {"code": 50035})
 
     locked = await lock_closed_posts(config, discord, NOW)
 
     assert locked == 0
-    assert await _locked(config) == {"1": NOW, "2": None}
+    assert await _locked(config) == {"1": NOW, "2": None, "3": NOW}
 
 
 @pytest.mark.anyio
