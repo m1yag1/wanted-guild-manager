@@ -7,7 +7,14 @@ from typing import Any
 import pytest
 
 from tests.fixtures.app import Interact
-from tests.fixtures.discord import ADMIN_ROLE_ID, GUILD_ID, MakeButton, MakeCommand
+from tests.fixtures.discord import (
+    ADMIN_ROLE_ID,
+    GUILD_ID,
+    MakeButton,
+    MakeCommand,
+    post_buttons,
+    post_words,
+)
 from tests.fixtures.discord_api import FakeDiscordApi
 
 ADMIN = {"roles": (ADMIN_ROLE_ID,)}
@@ -37,7 +44,7 @@ def _edits(api: FakeDiscordApi) -> list[Any]:
 
 def _event_id(api: FakeDiscordApi) -> str:
     post = [r for r in api.requests if r.method == "POST"][-1].body
-    return str(post["components"][0]["components"][0]["custom_id"].split(":")[1])
+    return str(post_buttons(post)[0]["custom_id"].split(":")[1])
 
 
 @pytest.fixture
@@ -113,9 +120,9 @@ async def test_editing_updates_the_event_and_its_post(
     later = STARTS + timedelta(hours=1)
     assert _content(reply).startswith("Updated **Siege, moved**: title, time.")
     edit = _edits(roles)[-1]
-    assert edit["content"].startswith("**Siege, moved** · Siege")
+    assert post_words(edit).startswith("## 🦈 [Siege] Siege, moved\n")
     closes = int((later - timedelta(minutes=30)).timestamp())
-    assert f"Sign-ups close <t:{closes}:R>" in edit["content"]
+    assert f"Sign-ups close <t:{closes}:R>" in post_words(edit)
     assert edit["allowed_mentions"] == {"parse": []}
     assert f"<t:{int(later.timestamp())}:F>" in _content(listed)
 
@@ -132,7 +139,7 @@ async def test_editing_the_type_and_close(
     )
 
     assert _content(reply).startswith("Updated **Siege night**: type, close.")
-    assert "· Boonstone" in _edits(roles)[-1]["content"]
+    assert "## 🦈 [Boonstone] Siege night\n" in post_words(_edits(roles)[-1])
     assert f"Sign-ups close <t:{int(STARTS.timestamp())}:R>" in _content(reply)
 
 
@@ -187,8 +194,8 @@ async def test_cancelling_marks_the_post_and_removes_the_buttons(
 
     assert _content(reply).startswith("Cancelled **Siege night**.")
     edit = _edits(roles)[-1]
-    assert "\n**Cancelled**\n" in edit["content"]
-    assert edit["components"] == []
+    assert "❌ **Cancelled**" in post_words(edit)
+    assert post_buttons(edit) == []
     assert _content(again).startswith("Pick an upcoming event")
     assert _content(listed) == "No upcoming events."
     assert _content(pressed) == "**Siege night** was cancelled."

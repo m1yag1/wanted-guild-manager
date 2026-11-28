@@ -55,12 +55,15 @@ PRESETS = {
 
 
 def test_event(preset: Preset, ctx: CommandContext, now: datetime) -> Event:
-    """A `[test]` event for a preset, starting relative to `now`."""
+    """A test event for a preset, starting relative to `now`.
+
+    Its type is Test, so the post reads like "[Test] Busy roster".
+    """
     starts_at = now + preset.starts_in
     event = Event(
         guild_id=ctx.guild_id,
-        title=f"[test] {preset.title}",
-        event_type="Other",
+        title=preset.title,
+        event_type="Test",
         starts_at=starts_at,
         closes_at=starts_at - preset.closes_before if preset.closes_before else None,
         created_by=ctx.user_id,

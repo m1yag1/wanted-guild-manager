@@ -8,6 +8,8 @@ from typing import Any
 import pytest
 from nacl.signing import SigningKey
 
+from wgm.domain.events.roster import post_text
+
 GUILD_ID = "1290000000000000000"
 ADMIN_ROLE_ID = "900"
 MANAGE_SERVER = str(1 << 5)
@@ -143,3 +145,22 @@ def wgm_form(discord_payload: LoadPayload) -> MakeForm:
         return json.dumps(payload).encode()
 
     return make
+
+
+def post_buttons(message: dict[str, Any]) -> list[dict[str, Any]]:
+    """The sign-up buttons inside an event post (a message or reply body)."""
+    found: list[dict[str, Any]] = []
+
+    def walk(components: list[dict[str, Any]]) -> None:
+        for component in components:
+            if component.get("type") == 2:  # noqa: PLR2004
+                found.append(component)
+            walk(component.get("components", []))
+
+    walk(message.get("components") or [])
+    return found
+
+
+def post_words(message: dict[str, Any]) -> str:
+    """All the text in an event post (a message or reply body)."""
+    return post_text(message.get("components") or [])

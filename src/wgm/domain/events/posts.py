@@ -7,7 +7,7 @@ from wgm.domain.discord.client import DiscordApiError
 from wgm.domain.discord.context import CommandContext, private_reply
 from wgm.domain.discord.permissions import ADMIN_ROLE
 from wgm.domain.discord.schemas import InteractionResponse
-from wgm.domain.events.roster import buttons, closes, event_post, is_closed
+from wgm.domain.events.roster import closes, is_closed, post_components
 from wgm.domain.events.services import EventService
 
 
@@ -19,8 +19,7 @@ async def update_post(ctx: CommandContext, event: Event) -> str:
         await ctx.discord.edit_message(
             event.channel_id or "",
             event.message_id or "",
-            event_post(event, ctx.now),
-            buttons(event, ctx.now),
+            post_components(event, ctx.now),
         )
     except DiscordApiError:
         return (

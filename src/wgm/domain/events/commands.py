@@ -23,11 +23,10 @@ from wgm.domain.events.posts import update_post
 from wgm.domain.events.roster import (
     BUTTON_LABELS,
     CHOICES,
-    buttons,
     closing_line,
-    event_post,
     heading,
     is_closed,
+    post_components,
     reasons,
     tally,
 )
@@ -79,7 +78,7 @@ async def post_event(ctx: CommandContext, event: Event) -> InteractionResponse:
     event = await events(ctx).create(event)
     try:
         message_id = await ctx.discord.post_message(
-            channel_id, event_post(event, ctx.now), buttons(event, ctx.now)
+            channel_id, post_components(event, ctx.now)
         )
     except DiscordApiError:
         await events(ctx).delete(event.id)

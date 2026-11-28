@@ -13,6 +13,8 @@ from tests.fixtures.discord import (
     MakeButton,
     MakeCommand,
     MakeForm,
+    post_buttons,
+    post_words,
 )
 from tests.fixtures.discord_api import FakeDiscordApi
 from wgm.db.config import database_config
@@ -51,7 +53,7 @@ async def event_id(
 ) -> str:
     await interact(wgm_command("event create", **ADMIN, **EVENT))
     post = [r for r in roles.requests if r.method == "POST"][-1].body
-    return str(post["components"][0]["components"][0]["custom_id"].split(":")[1])
+    return str(post_buttons(post)[0]["custom_id"].split(":")[1])
 
 
 async def _close(settings: Settings, event_id: str) -> None:
@@ -80,7 +82,7 @@ async def test_admins_add_members_and_changes_after_close_are_late(
             **ADMIN,
         )
     )
-    on_time = _post_edits(roles)[-1]["content"]
+    on_time = post_words(_post_edits(roles)[-1])
     await _close(settings, event_id)
     late = await interact(
         wgm_command(
@@ -95,11 +97,11 @@ async def test_admins_add_members_and_changes_after_close_are_late(
     locked = _post_edits(roles)[-1]
 
     assert _content(added) == "Put **Lyra** down as DPS for **Siege night**."
-    assert "DPS (1): Lyra\n" in on_time
+    assert "🗡️ **DPS (1)**\nLyra\n" in on_time
     assert _content(late) == "Put **Lyra** down as Healer (late) for **Siege night**."
-    assert "Healer (1): Lyra (late)" in locked["content"]
-    assert "DPS (0): -" in locked["content"]
-    assert all(b["disabled"] for b in locked["components"][0]["components"])
+    assert "💚 **Healers (1)**\nLyra (late)" in post_words(locked)
+    assert "🗡️ **DPS (0)**\n-" in post_words(locked)
+    assert all(b["disabled"] for b in post_buttons(locked))
 
 
 @pytest.mark.anyio
@@ -120,7 +122,7 @@ async def test_admins_remove_members(
     )
 
     assert _content(removed) == "Took **Lyra** off the roster for **Siege night**."
-    assert "Tank (0): -" in _post_edits(roles)[-1]["content"]
+    assert "🛡️ **Tanks (0)**\n-" in post_words(_post_edits(roles)[-1])
     assert _content(again) == "**Lyra** isn't on the roster for **Siege night**."
 
 
@@ -159,12 +161,12 @@ async def test_not_attending_asks_for_an_optional_reason_only_admins_see(
     field = form["data"]["components"][0]["components"][0]
     assert (field["custom_id"], field["required"]) == ("reason", False)
     assert with_reason["type"] == 7
-    assert "**Not attending (1)**: Kael" in _content(with_reason)
-    assert "Working late" not in _content(with_reason)
+    assert "**Not attending (1)**: Kael" in post_words(with_reason["data"])
+    assert "Working late" not in post_words(with_reason["data"])
     assert "Working late" not in _content(member_list)
     assert "Not attending: Kael (Working late)" in _content(admin_list)
     assert "Not attending: Kael\n" in _content(blank) + "\n"
-    assert "**Not attending (0)**" in _content(toggled)
+    assert "**Not attending (0)**" in post_words(toggled["data"])
 
 
 @pytest.mark.anyio

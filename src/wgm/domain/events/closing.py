@@ -11,14 +11,16 @@ from datetime import datetime
 from advanced_alchemy.extensions.litestar import SQLAlchemyAsyncConfig
 
 from wgm.domain.discord.client import DiscordApiError, DiscordClient
-from wgm.domain.events.roster import buttons, event_post
+from wgm.domain.events.roster import post_components
 from wgm.domain.events.services import EventService
 from wgm.plugins.spec import JobContext
 
 logger = logging.getLogger(__name__)
 
-GONE = (403, 404)
-"""The post was deleted or the app lost access: stop trying."""
+GONE = (400, 403, 404)
+"""Retrying won't help: Discord refused the edit (such as an old plain-text
+post that can't become the new design), or the post was deleted, or the app
+lost access."""
 
 
 async def lock_closed_posts(
@@ -33,8 +35,7 @@ async def lock_closed_posts(
                 await discord.edit_message(
                     event.channel_id or "",
                     event.message_id or "",
-                    event_post(event, now),
-                    buttons(event, now),
+                    post_components(event, now),
                 )
             except DiscordApiError as error:
                 if error.status not in GONE:

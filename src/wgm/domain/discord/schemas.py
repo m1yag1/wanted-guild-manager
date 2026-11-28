@@ -39,6 +39,8 @@ class MessageFlags(IntFlag):
 
     EPHEMERAL = 64
     """Only the person who ran the command sees the reply."""
+    IS_COMPONENTS_V2 = 1 << 15
+    """The message is built from layout components (no plain content)."""
 
 
 class InteractionOption(msgspec.Struct):
