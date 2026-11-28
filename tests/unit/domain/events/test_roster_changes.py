@@ -154,7 +154,7 @@ async def test_not_attending_asks_for_an_optional_reason_only_admins_see(
     admin_list = await interact(wgm_command("event list", **ADMIN))
     await interact(wgm_form(f"reason:{event_id}", reason="  "))
     blank = await interact(wgm_command("event list", **ADMIN))
-    toggled = await interact(wgm_button(f"signup:{event_id}:not_attending"))
+    reopened = await interact(wgm_button(f"signup:{event_id}:not_attending"))
 
     assert form["type"] == 9
     assert form["data"]["custom_id"] == f"reason:{event_id}"
@@ -166,7 +166,7 @@ async def test_not_attending_asks_for_an_optional_reason_only_admins_see(
     assert "Working late" not in _content(member_list)
     assert "Not attending: Kael (Working late)" in _content(admin_list)
     assert "Not attending: Kael\n" in _content(blank) + "\n"
-    assert "**Not attending (0)**" in post_words(toggled["data"])
+    assert reopened["type"] == 9  # the form again, to change the reason
 
 
 @pytest.mark.anyio

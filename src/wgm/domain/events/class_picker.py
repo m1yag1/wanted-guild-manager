@@ -4,8 +4,13 @@ The class they last confirmed for that role is pre-selected, but they still
 confirm it. Picking another class applies it at once. "Other classes" offers
 the classes the first dropdown left out, such as Seeker played as DPS.
 
+Only one dropdown shows at a time: "Other classes" swaps the message for a
+button per role, and each of those for that role's dropdown, with a button
+back to the member's own role.
+
 Custom ids: `class:pick:<event>:<role>:<n>` for dropdowns,
-`class:ok:<event>:<role>:<class>` to confirm, `class:more:<event>:<role>`.
+`class:ok:<event>:<role>:<class>` to confirm, `class:more:<event>:<role>`,
+`class:group:<event>:<role>:<group role>` and `class:back:<event>:<role>`.
 """
 
 from typing import Any
@@ -93,12 +98,67 @@ async def class_prompt(ctx: CommandContext, event: Event, role: str) -> MessageD
     )
 
 
+def _replace(message: MessageData) -> InteractionResponse:
+    """Swap the private class message for another, keeping one dropdown."""
+    return InteractionResponse(
+        type=InteractionResponseType.UPDATE_MESSAGE,
+        data=MessageData(content=message.content, components=message.components),
+    )
+
+
+def _other_classes(
+    event: Event, role: str, rest: dict[str, list[str]], group: list[str]
+) -> MessageData:
+    """Buttons for each role's other classes, or one role's classes to pick from.
+
+    Only one dropdown shows at a time, with Back to the role's own classes.
+    """
+    back = {
+        "type": BUTTON,
+        "style": SECONDARY,
+        "label": f"Back to {role} classes",
+        "custom_id": f"{PREFIX}:back:{event.id}:{role}",
+    }
+    chosen = group[0] if group and group[0] in rest else None
+    if chosen is None:
+        groups = [
+            {
+                "type": BUTTON,
+                "style": PRIMARY,
+                "label": f"{name} classes",
+                "custom_id": f"{PREFIX}:group:{event.id}:{role}:{name}",
+            }
+            for name in rest
+        ]
+        return MessageData(
+            content=f"Which role's classes? You'll still be down as **{role}**.",
+            components=[{"type": ACTION_ROW, "components": [*groups, back]}],
+        )
+    return MessageData(
+        content=f"{chosen} classes, to bring as **{role}**:",
+        components=[
+            _select(event, role, 1, rest[chosen]),
+            {"type": ACTION_ROW, "components": [back]},
+        ],
+    )
+
+
 def _done(content: str) -> InteractionResponse:
     """Replace the private class message, removing its dropdowns."""
     return InteractionResponse(
         type=InteractionResponseType.UPDATE_MESSAGE,
         data=MessageData(content=content, components=[]),
     )
+
+
+async def _navigate(
+    ctx: CommandContext, event: Event, role: str, action: str, group: list[str]
+) -> MessageData:
+    if action == "back":
+        return await class_prompt(ctx, event, role)
+    events = EventService(session=ctx.session)
+    shown = ranked(role, await events.class_counts(event.guild_id, role))
+    return _other_classes(event, role, the_rest(shown), group)
 
 
 async def pick_class(ctx: CommandContext) -> InteractionResponse:
@@ -116,18 +176,8 @@ async def pick_class(ctx: CommandContext) -> InteractionResponse:
     signup = events.signup(event, ctx.user_id)
     if signup is None or signup.role != role:
         return _done(f"You're not down as {role} for **{event.title}** anymore.")
-    if action == "more":
-        shown = ranked(role, await events.class_counts(event.guild_id, role))
-        rows = [
-            _select(event, role, n, names)
-            for n, names in enumerate(the_rest(shown).values(), start=1)
-        ]
-        return InteractionResponse(
-            type=InteractionResponseType.UPDATE_MESSAGE,
-            data=MessageData(
-                content=f"Other classes, to bring as **{role}**:", components=rows
-            ),
-        )
+    if action in ("back", "more", "group"):
+        return _replace(await _navigate(ctx, event, role, action, parts[4:]))
     picked = parts[4] if action == "ok" and len(parts) > 4 else ""  # noqa: PLR2004
     if action == "pick" and data and data.values:
         picked = data.values[0]

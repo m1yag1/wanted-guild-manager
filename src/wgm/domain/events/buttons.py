@@ -86,7 +86,9 @@ def reason_form(event: Event, last: str | None = None) -> ModalResponse:
 async def press(ctx: CommandContext) -> InteractionResponse | ModalResponse:
     """Record the member's answer and redraw the post.
 
-    Pressing the answer they already gave takes them off the roster.
+    Pressing the answer they already gave never takes them off: their role
+    reopens the class picker, and Not attending reopens the reason form.
+    Members change their answer by pressing another button.
     """
     data = ctx.interaction.data
     member = ctx.interaction.member
@@ -98,16 +100,12 @@ async def press(ctx: CommandContext) -> InteractionResponse | ModalResponse:
         return event
     events = EventService(session=ctx.session)
     status, role = CHOICES[parsed[1]]
-    current = events.signup(event, member.user.id)
-    if current and (current.status, current.role) == (status, role):
-        event = await events.remove_answer(
-            event, member.user.id, member.user.id, ctx.now
-        )
-        return redrawn(event, ctx)
     if status is SignupStatus.NOT_ATTENDING:
         return reason_form(event, await events.last_reason(event, member.user.id))
-    answer = Answer(member.user.id, _name(member), status, role, by=member.user.id)
-    event = await events.set_answer(event, answer, ctx.now)
+    current = events.signup(event, member.user.id)
+    if not (current and (current.status, current.role) == (status, role)):
+        answer = Answer(member.user.id, _name(member), status, role, by=member.user.id)
+        event = await events.set_answer(event, answer, ctx.now)
     if role is None:
         return redrawn(event, ctx)
     # Ask for their class privately; the post is redrawn through the API.
