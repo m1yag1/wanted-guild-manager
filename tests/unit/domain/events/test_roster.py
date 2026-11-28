@@ -82,7 +82,9 @@ def test_the_post_is_one_box_with_the_shark_title_and_buttons_inside() -> None:
     assert box["accent_color"] == OPEN
     assert text.startswith("## 🦈 [Siege] Siege night\n🕗 <t:")
     assert f"🔒 Sign-ups close <t:{int(CLOSES.timestamp())}:R>" in text
-    assert text.endswith("-# Attending 3 · Tentative 1 · Not attending 1")
+    assert text.endswith(
+        "-# Attending 3 · Tentative 1 · Not attending 1\n-# Posted by <@42>"
+    )
     rows = [c for c in box["components"] if c["type"] == 1]
     assert [b["label"] for b in rows[0]["components"]][:3] == [
         "Healer",

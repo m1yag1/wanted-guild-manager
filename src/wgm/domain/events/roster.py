@@ -186,7 +186,7 @@ def post_components(event: Event, now: datetime) -> list[dict[str, Any]]:
         _divider(large=True),
         _text(others),
         *([_divider(), *buttons(event, now)] if not event.cancelled_at else []),
-        _text(f"-# {tally(event)}"),
+        _text(f"-# {tally(event)}\n-# Posted by <@{event.created_by}>"),
     ]
     return [{"type": CONTAINER, "accent_color": color, "components": inside}]
 
