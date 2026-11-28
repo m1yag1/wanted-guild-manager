@@ -25,6 +25,8 @@ def test_wgm_groups_event_subcommands() -> None:
         "edit",
         "cancel",
         "delete",
+        "add",
+        "remove",
         "list",
         "channel",
         "close-time",

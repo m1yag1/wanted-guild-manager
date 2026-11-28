@@ -182,3 +182,17 @@ async def test_in_guild_finds_events_only_in_their_server(
         garbled = await events.in_guild("Siege night", "1")
 
     assert (found, other, garbled) == (event, None, None)
+
+
+@pytest.mark.anyio
+async def test_removing_someone_not_on_the_roster_changes_nothing(
+    config: SQLAlchemyAsyncConfig,
+) -> None:
+    async with config.get_session() as session:
+        events = EventService(session=session)
+        event = await events.create(_event("Siege", 2))
+
+        event = await events.remove_answer(event, "nobody", "42", NOW)
+        history = await events.history(event)
+
+    assert (event.signups, history) == ([], [])

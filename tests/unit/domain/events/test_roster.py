@@ -6,6 +6,7 @@ from wgm.domain.events.roster import (
     buttons,
     closing_line,
     event_post,
+    reasons,
     roster,
     tally,
     when,
@@ -100,3 +101,19 @@ def test_events_from_before_closing_existed_close_at_the_start() -> None:
     assert closing_line(event, CLOSES) == (
         f"Sign-ups close <t:{int(STARTS.timestamp())}:R>"
     )
+
+
+def test_reasons_list_who_is_not_attending_and_why() -> None:
+    event = _event()
+    event.signups[-1].reason = "Working late"
+
+    assert reasons(event) == "Not attending: Vex (Working late)"
+    event.signups.pop()
+    assert reasons(event) == ""
+
+
+def test_late_changes_are_marked() -> None:
+    event = _event()
+    event.signups[0].late = True
+
+    assert "Tank (1): Kael (late)" in roster(event)

@@ -73,7 +73,24 @@ def heading(event: Event) -> str:
 
 
 def _names(signups: list[Signup]) -> str:
-    return ", ".join(signup.character_name for signup in signups) or "-"
+    return (
+        ", ".join(
+            signup.character_name + (" (late)" if signup.late else "")
+            for signup in signups
+        )
+        or "-"
+    )
+
+
+def reasons(event: Event) -> str:
+    """Not attending: Vex (work), Nyx, for admins only."""
+    absent = [s for s in event.signups if s.status is SignupStatus.NOT_ATTENDING]
+    if not absent:
+        return ""
+    names = ", ".join(
+        s.character_name + (f" ({s.reason})" if s.reason else "") for s in absent
+    )
+    return f"Not attending: {names}"
 
 
 def roster(event: Event) -> str:

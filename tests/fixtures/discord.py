@@ -67,6 +67,7 @@ def wgm_command(discord_payload: LoadPayload) -> MakeCommand:
         roles: tuple[str, ...] = (),
         permissions: str = "0",
         in_server: bool = True,
+        nicks: dict[str, str] | None = None,
         **values: str | int,
     ) -> bytes:
         payload = json.loads(discord_payload("application_command"))
@@ -78,6 +79,13 @@ def wgm_command(discord_payload: LoadPayload) -> MakeCommand:
             kind = 1 if not options or options[0]["type"] in (3, 4) else 2
             options = [{"name": name, "type": kind, "options": options}]
         payload["data"]["options"] = options
+        if nicks:
+            payload["data"]["resolved"] = {
+                "users": {
+                    uid: {"username": nick.lower()} for uid, nick in nicks.items()
+                },
+                "members": {uid: {"nick": nick} for uid, nick in nicks.items()},
+            }
         payload["member"]["roles"] = list(roles)
         payload["member"]["permissions"] = permissions
         if not in_server:
@@ -111,6 +119,22 @@ def wgm_button(discord_payload: LoadPayload) -> MakeButton:
         payload["member"]["user"]["id"] = user_id
         payload["member"]["nick"] = nick
         payload["message"] = {"id": message_id, "channel_id": "1290000000000000001"}
+        return json.dumps(payload).encode()
+
+    return make
+
+
+MakeForm = Callable[..., bytes]
+
+
+@pytest.fixture
+def wgm_form(discord_payload: LoadPayload) -> MakeForm:
+    """A submitted form (modal) body for a `custom_id`, with its reason field."""
+
+    def make(custom_id: str, *, reason: str = "Working late") -> bytes:
+        payload = json.loads(discord_payload("modal_submit"))
+        payload["data"]["custom_id"] = custom_id
+        payload["data"]["components"][0]["components"][0]["value"] = reason
         return json.dumps(payload).encode()
 
     return make

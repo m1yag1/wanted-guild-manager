@@ -6,7 +6,6 @@ from litestar import Controller, Response, post
 from litestar.background_tasks import BackgroundTask
 from litestar.datastructures import State
 from litestar.di import NamedDependency
-from litestar.exceptions import ClientException
 from litestar.params import JSONBody
 from litestar.status_codes import HTTP_200_OK
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,6 +23,7 @@ from wgm.domain.discord.schemas import (
     InteractionType,
     MessageData,
     MessageFlags,
+    ModalResponse,
 )
 from wgm.lib.settings import Settings
 
@@ -41,22 +41,14 @@ class DiscordController(Controller):
         data: JSONBody[Interaction],
         state: State,
         db_session: NamedDependency[AsyncSession],
-    ) -> Response[InteractionResponse | AutocompleteResponse]:
+    ) -> Response[InteractionResponse | AutocompleteResponse | ModalResponse]:
         """Answer an interaction.
 
         Discord sends a PING when the endpoint URL is saved, and expects a PONG.
-
-        Raises:
-            ClientException: The interaction type is not handled yet.
+        Buttons and submitted forms go to the plugin owning their custom_id.
         """
         if data.type is InteractionType.PING:
             return Response(InteractionResponse(type=InteractionResponseType.PONG))
-        if data.type not in (
-            InteractionType.APPLICATION_COMMAND,
-            InteractionType.MESSAGE_COMPONENT,
-            InteractionType.APPLICATION_COMMAND_AUTOCOMPLETE,
-        ):
-            raise ClientException(f"Unsupported interaction type: {data.type.name}")
         settings: Settings = state.settings
         discord: DiscordClient = state.discord
         if data.type is InteractionType.APPLICATION_COMMAND:

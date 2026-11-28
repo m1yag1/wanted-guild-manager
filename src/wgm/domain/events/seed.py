@@ -17,18 +17,18 @@ from wgm.domain.discord.schemas import InteractionResponse
 from wgm.domain.events.commands import post_event
 
 ROSTER = [
-    ("Kael", SignupStatus.ATTENDING, "Tank"),
-    ("Brask", SignupStatus.ATTENDING, "Tank"),
-    ("Mira", SignupStatus.ATTENDING, "Healer"),
-    ("Rook", SignupStatus.ATTENDING, "Healer"),
-    ("Lyra", SignupStatus.ATTENDING, "DPS"),
-    ("Thorn", SignupStatus.ATTENDING, "DPS"),
-    ("Sable", SignupStatus.ATTENDING, "DPS"),
-    ("Orin", SignupStatus.ATTENDING, "DPS"),
-    ("Ash", SignupStatus.TENTATIVE, None),
-    ("Juno", SignupStatus.TENTATIVE, None),
-    ("Vex", SignupStatus.NOT_ATTENDING, None),
-    ("Nyx", SignupStatus.NOT_ATTENDING, None),
+    ("Kael", SignupStatus.ATTENDING, "Tank", None),
+    ("Brask", SignupStatus.ATTENDING, "Tank", None),
+    ("Mira", SignupStatus.ATTENDING, "Healer", None),
+    ("Rook", SignupStatus.ATTENDING, "Healer", None),
+    ("Lyra", SignupStatus.ATTENDING, "DPS", None),
+    ("Thorn", SignupStatus.ATTENDING, "DPS", None),
+    ("Sable", SignupStatus.ATTENDING, "DPS", None),
+    ("Orin", SignupStatus.ATTENDING, "DPS", None),
+    ("Ash", SignupStatus.TENTATIVE, None, None),
+    ("Juno", SignupStatus.TENTATIVE, None, None),
+    ("Vex", SignupStatus.NOT_ATTENDING, None, "Working late"),
+    ("Nyx", SignupStatus.NOT_ATTENDING, None, None),
 ]
 """Made-up members for the busy roster preset."""
 
@@ -70,8 +70,14 @@ def test_event(preset: Preset, ctx: CommandContext, now: datetime) -> Event:
         event.closed_post_at = now
     if preset.roster:
         event.signups.extend(
-            Signup(user_id=f"test-{n}", character_name=name, status=status, role=role)
-            for n, (name, status, role) in enumerate(ROSTER, start=1)
+            Signup(
+                user_id=f"test-{n}",
+                character_name=name,
+                status=status,
+                role=role,
+                reason=reason,
+            )
+            for n, (name, status, role, reason) in enumerate(ROSTER, start=1)
         )
     return event
 

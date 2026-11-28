@@ -30,6 +30,8 @@ class InteractionResponseType(IntEnum):
     """Edit the message whose button was pressed."""
     APPLICATION_COMMAND_AUTOCOMPLETE_RESULT = 8
     """Suggestions for the option being typed."""
+    MODAL = 9
+    """Open a small form."""
 
 
 class MessageFlags(IntFlag):
@@ -50,12 +52,58 @@ class InteractionOption(msgspec.Struct):
     """Set on the option being typed, when asking for suggestions."""
 
 
+class FormField(msgspec.Struct):
+    """A text field in a submitted form, or the row holding it."""
+
+    type: int
+    custom_id: str = ""
+    value: str = ""
+    components: list["FormField"] = []
+
+
+class ResolvedUser(msgspec.Struct):
+    """A user picked in a user option."""
+
+    username: str = ""
+    global_name: str | None = None
+
+
+class ResolvedMember(msgspec.Struct):
+    """A picked user's membership in the server."""
+
+    nick: str | None = None
+
+
+class Resolved(msgspec.Struct):
+    """Details of users picked in options, by user ID."""
+
+    users: dict[str, ResolvedUser] = {}
+    members: dict[str, ResolvedMember] = {}
+
+    def name(self, user_id: str) -> str:
+        """Server nickname, else display name, else username."""
+        user = self.users.get(user_id, ResolvedUser())
+        nick = self.members.get(user_id, ResolvedMember()).nick
+        return nick or user.global_name or user.username or user_id
+
+
 class InteractionData(msgspec.Struct):
-    """What was used: a command (name, options) or a button (custom_id)."""
+    """What was used: a command (name, options), a button or a form (custom_id)."""
 
     name: str = ""
     options: list[InteractionOption] = []
     custom_id: str = ""
+    components: list[FormField] = []
+    """A submitted form's rows of fields."""
+    resolved: Resolved = msgspec.field(default_factory=Resolved)
+
+    def field(self, custom_id: str) -> str:
+        """The text typed in a submitted form's field, or ""."""
+        for row in self.components:
+            for item in row.components:
+                if item.custom_id == custom_id:
+                    return item.value
+        return ""
 
 
 class User(msgspec.Struct):
@@ -136,3 +184,18 @@ class AutocompleteResponse(msgspec.Struct):
     type: InteractionResponseType = (
         InteractionResponseType.APPLICATION_COMMAND_AUTOCOMPLETE_RESULT
     )
+
+
+class ModalData(msgspec.Struct):
+    """A form: its id, title and rows of text fields."""
+
+    custom_id: str
+    title: str
+    components: list[dict[str, Any]]
+
+
+class ModalResponse(msgspec.Struct):
+    """Our answer when a press should open a form."""
+
+    data: ModalData
+    type: InteractionResponseType = InteractionResponseType.MODAL

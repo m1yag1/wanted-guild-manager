@@ -8,12 +8,14 @@ from attrs import field, frozen
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from wgm.domain.discord.client import DiscordClient
+from wgm.domain.discord.permissions import may_run
 from wgm.domain.discord.schemas import (
     Interaction,
     InteractionResponse,
     InteractionResponseType,
     MessageData,
     MessageFlags,
+    ModalResponse,
 )
 from wgm.lib.settings import Settings
 
@@ -55,11 +57,27 @@ class CommandContext:
         member = self.interaction.member
         return member.user.id if member else ""
 
+    async def may(self, roles: tuple[str, ...]) -> bool:
+        """Whether the member has one of `roles` (or Manage Server).
+
+        Only for server-only commands, which always run with a member.
+        """
+        member = self.interaction.member
+        role_ids = await self.discord.role_ids(self.guild_id)
+        return may_run(
+            roles,
+            member.roles if member else [],
+            member.permissions if member else "0",
+            role_ids,
+        )
+
 
 Handler = Callable[[CommandContext, dict[str, Any]], Awaitable[InteractionResponse]]
 """Answers one subcommand, given its option values."""
-ButtonHandler = Callable[[CommandContext], Awaitable[InteractionResponse]]
-"""Answers a button press."""
+ButtonHandler = Callable[
+    [CommandContext], Awaitable[InteractionResponse | ModalResponse]
+]
+"""Answers a button press or a submitted form, which may open a form."""
 Suggest = Callable[[CommandContext, str, str], Awaitable[list[tuple[str, str]]]]
 """Suggestions for an option, given its name and what was typed so far:
 (what the member sees, the value sent) pairs."""

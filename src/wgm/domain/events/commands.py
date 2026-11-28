@@ -14,20 +14,25 @@ from wgm.domain.discord.options import (
     choice,
     integer,
     text,
+    user,
 )
 from wgm.domain.discord.permissions import ADMIN_ROLE
 from wgm.domain.discord.schemas import InteractionResponse
 from wgm.domain.events.roster import (
+    BUTTON_LABELS,
+    CHOICES,
     buttons,
     closing_line,
     event_post,
     heading,
     is_closed,
+    reasons,
     tally,
 )
 from wgm.domain.events.services import (
     EVENT_TYPES,
     MAX_CLOSE_MINUTES,
+    Answer,
     EventInputError,
     EventService,
     GuildSettingsService,
@@ -111,8 +116,18 @@ async def _create(ctx: CommandContext, values: dict[str, Any]) -> InteractionRes
 
 async def _list(ctx: CommandContext, values: dict[str, Any]) -> InteractionResponse:
     upcoming = await events(ctx).upcoming(ctx.guild_id, ctx.now)
+    admin = bool(upcoming) and await ctx.may((ADMIN_ROLE,))
     posts = [
-        f"{heading(event)}\n{closing_line(event, ctx.now)}\n{tally(event)}"
+        "\n".join(
+            line
+            for line in (
+                heading(event),
+                closing_line(event, ctx.now),
+                tally(event),
+                reasons(event) if admin else "",
+            )
+            if line
+        )
         for event in upcoming
     ]
     return private_reply("\n\n".join(posts) or "No upcoming events.")
@@ -324,6 +339,42 @@ NOT_FOUND_STATUS = 404
 """The post was already gone."""
 
 
+async def _add(ctx: CommandContext, values: dict[str, Any]) -> InteractionResponse:
+    event = await _upcoming(ctx, values)
+    data = ctx.interaction.data
+    if event is None or data is None:
+        return private_reply(NOT_FOUND)
+    user_id, choice_id = str(values["member"]), str(values["answer"])
+    name = data.resolved.name(user_id)
+    status, role = CHOICES[choice_id]
+    answer = Answer(user_id, name, status, role, by=ctx.user_id)
+    event = await events(ctx).set_answer(event, answer, ctx.now)
+    problem = await _redraw(ctx, event)
+    await events(ctx).update(event)
+    late = " (late)" if is_closed(event, ctx.now) else ""
+    return private_reply(
+        f"Put **{name}** down as {BUTTON_LABELS[choice_id]}{late} for "
+        f"**{event.title}**.{problem}"
+    )
+
+
+async def _remove(ctx: CommandContext, values: dict[str, Any]) -> InteractionResponse:
+    event = await _upcoming(ctx, values)
+    data = ctx.interaction.data
+    if event is None or data is None:
+        return private_reply(NOT_FOUND)
+    user_id = str(values["member"])
+    name = data.resolved.name(user_id)
+    if events(ctx).signup(event, user_id) is None:
+        return private_reply(f"**{name}** isn't on the roster for **{event.title}**.")
+    event = await events(ctx).remove_answer(event, user_id, ctx.user_id, ctx.now)
+    problem = await _redraw(ctx, event)
+    await events(ctx).update(event)
+    return private_reply(
+        f"Took **{name}** off the roster for **{event.title}**.{problem}"
+    )
+
+
 async def setup_line(ctx: CommandContext) -> str:
     """What `/wgm setup` says about the event channel."""
     channel_id = (await guilds(ctx).for_guild(ctx.guild_id)).event_channel_id
@@ -384,6 +435,30 @@ SUBCOMMANDS = (
         (ADMIN_ROLE,),
         [EVENT_OPTION],
         suggest=suggest_any_events,
+    ),
+    Subcommand(
+        ("event", "add"),
+        "Put a member on an event's roster, even after sign-ups close",
+        _add,
+        (ADMIN_ROLE,),
+        [
+            EVENT_OPTION,
+            user("member", "Who to add"),
+            text(
+                "answer",
+                "Their answer",
+                choices=[{"name": v, "value": k} for k, v in BUTTON_LABELS.items()],
+            ),
+        ],
+        suggest=suggest_events,
+    ),
+    Subcommand(
+        ("event", "remove"),
+        "Take a member off an event's roster, even after sign-ups close",
+        _remove,
+        (ADMIN_ROLE,),
+        [EVENT_OPTION, user("member", "Who to take off")],
+        suggest=suggest_events,
     ),
     Subcommand(("event", "list"), "List upcoming events", _list),
     Subcommand(
