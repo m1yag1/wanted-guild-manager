@@ -30,7 +30,6 @@ def _event(title: str, hours: int, guild: str = "1", **extra: object) -> Event:
     return Event(
         guild_id=guild,
         title=title,
-        event_type="Siege",
         starts_at=NOW + timedelta(hours=hours),
         created_by="42",
         **extra,

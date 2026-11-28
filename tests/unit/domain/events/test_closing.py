@@ -41,7 +41,6 @@ async def _post(
             Event(
                 guild_id="1",
                 title=f"Event {message_id}",
-                event_type="Siege",
                 starts_at=NOW + timedelta(minutes=10),
                 created_by="42",
                 channel_id="7",

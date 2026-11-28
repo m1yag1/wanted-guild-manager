@@ -13,6 +13,7 @@ from sqlalchemy import func, select
 from wgm.db.models import (
     DEFAULT_CLOSE_MINUTES,
     Event,
+    EventType,
     GuildSettings,
     MemberClass,
     Signup,
@@ -21,15 +22,8 @@ from wgm.db.models import (
     SignupStatus,
 )
 
-EVENT_TYPES = (
-    "Siege",
-    "Boonstone",
-    "Riftstone",
-    "Archboss",
-    "Guild Raid",
-    "Arena",
-    "Other",
-)
+TYPE_LENGTH = 32
+"""The longest event type name."""
 MAX_CLOSE_MINUTES = 7 * 24 * 60
 """Sign-ups can close at most a week before the start."""
 
@@ -363,3 +357,100 @@ class GuildSettingsService(SQLAlchemyAsyncRepositoryService[GuildSettings]):
     async def set_close_minutes(self, guild_id: str, minutes: int) -> GuildSettings:
         """Choose how long before the start sign-ups close, for new events."""
         return await self._change(guild_id, close_minutes=minutes)
+
+
+class EventTypeService(SQLAlchemyAsyncRepositoryService[EventType]):
+    """Each server's kinds of event. Removing one archives it."""
+
+    class Repo(SQLAlchemyAsyncRepository[EventType]):
+        """Event type data access."""
+
+        model_type = EventType
+
+    repository_type = Repo
+
+    async def _all(self, guild_id: str) -> list[EventType]:
+        """Every type the server has had, archived ones too, oldest first.
+
+        A server that has never had any gets a copy of the starter rows.
+        """
+        found = await self._of(guild_id)
+        if not found:
+            starters = await self._of(None)
+            found = list(
+                await self.create_many(
+                    [EventType(guild_id=guild_id, name=t.name) for t in starters]
+                )
+            )
+        return found
+
+    async def _of(self, guild_id: str | None) -> list[EventType]:
+        owner = (
+            EventType.guild_id.is_(None)
+            if guild_id is None
+            else EventType.guild_id == guild_id
+        )
+        statement = (
+            select(EventType)
+            .where(owner)
+            .order_by(EventType.created_at, EventType.name)
+        )
+        return list(await self.repository.get_many(statement=statement))
+
+    async def listed(self, guild_id: str) -> list[EventType]:
+        """The server's current kinds of event."""
+        return [kind for kind in await self._all(guild_id) if kind.archived_at is None]
+
+    async def find(self, guild_id: str, typed: str) -> EventType | None:
+        """The listed type that `typed` names, ignoring case, or None."""
+        return _named(await self.listed(guild_id), typed)
+
+    async def add(self, guild_id: str, name: str) -> list[EventType]:
+        """Put a kind of event on the list, or back on it, and return the list.
+
+        Raises:
+            EventInputError: The name is blank, too long or already listed.
+        """
+        name = " ".join(name.split())
+        if not name or len(name) > TYPE_LENGTH:
+            raise EventInputError(f"Use a name of 1 to {TYPE_LENGTH} characters.")
+        every = await self._all(guild_id)
+        found = _named(every, name)
+        if found is not None and found.archived_at is None:
+            raise EventInputError(f"**{name}** is already on the list.")
+        if found is None:
+            await self.create(EventType(guild_id=guild_id, name=name))
+        else:
+            found.archived_at = None
+            await self.update(found)
+        return await self.listed(guild_id)
+
+    async def remove(self, guild_id: str, name: str, now: datetime) -> list[EventType]:
+        """Archive a kind of event and return the list. Its events keep it.
+
+        Raises:
+            EventInputError: It isn't on the list.
+        """
+        found = await self.find(guild_id, name)
+        if found is None:
+            raise EventInputError(f"**{name.strip()}** isn't on the list.")
+        found.archived_at = now
+        await self.update(found)
+        return await self.listed(guild_id)
+
+    async def for_tests(self, guild_id: str, now: datetime) -> EventType:
+        """The archived Test type test events use, so it never shows in the list."""
+        found = _named(await self._all(guild_id), TEST_TYPE)
+        if found is None:
+            found = await self.create(
+                EventType(guild_id=guild_id, name=TEST_TYPE, archived_at=now)
+            )
+        return found
+
+
+TEST_TYPE = "Test"
+
+
+def _named(types: list[EventType], typed: str) -> EventType | None:
+    wanted = typed.strip().casefold()
+    return next((kind for kind in types if kind.name.casefold() == wanted), None)

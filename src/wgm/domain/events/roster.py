@@ -79,7 +79,7 @@ def tally(event: Event) -> str:
 
 def heading(event: Event) -> str:
     """Title, type and start time."""
-    return f"**{event.title}** · {event.event_type}\n{when(event.starts_at)}"
+    return f"**{event.title}** · {event.type_name}\n{when(event.starts_at)}"
 
 
 def _name(signup: Signup) -> str:
@@ -178,7 +178,7 @@ def post_components(event: Event, now: datetime) -> list[dict[str, Any]]:
     )
     attending, others = roster_blocks(event)
     inside = [
-        _text(f"## 🦈 [{event.event_type}] {event.title}{_subtitle(event)}"),
+        _text(f"## 🦈 [{event.type_name}] {event.title}{_subtitle(event)}"),
         _text(status_line(event, now)),
         _divider(large=True),
         _text(attending[0]),
@@ -186,7 +186,7 @@ def post_components(event: Event, now: datetime) -> list[dict[str, Any]]:
         _divider(large=True),
         _text(others),
         *([_divider(), *buttons(event, now)] if not event.cancelled_at else []),
-        _text(f"-# {tally(event)}"),
+        _text(f"-# {tally(event)}\n-# Posted by <@{event.created_by}>"),
     ]
     return [{"type": CONTAINER, "accent_color": color, "components": inside}]
 
