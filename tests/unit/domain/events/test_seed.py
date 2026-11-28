@@ -61,7 +61,10 @@ async def test_seed_posts_each_preset(
     assert not any(_disabled(posts["closes-soon"]))
     assert "Sign-ups closed <t:" in posts["closed"]["content"]
     assert all(_disabled(posts["closed"]))
-    assert "DPS (4): Lyra, Thorn, Sable, Orin" in posts["busy"]["content"]
+    assert (
+        "DPS (4): Lyra (Mobilist), Thorn (Predator), Sable (Infiltrator), "
+        "Orin (Liberator)" in posts["busy"]["content"]
+    )
     assert "**Not attending (2)**: Vex, Nyx" in posts["busy"]["content"]
     assert "[test] Old style" in posts["old-style"]["content"]
     assert "Attending 8 · Tentative 2 · Not attending 2" in listed["data"]["content"]
@@ -77,9 +80,12 @@ async def test_members_can_press_buttons_on_a_busy_test_event(
     await interact(wgm_command("event seed", preset="busy", **ADMIN))
     custom_id = _post(roles)["components"][0]["components"][0]["custom_id"]
 
-    reply = await interact(wgm_button(custom_id))
+    await interact(wgm_button(custom_id))
 
-    assert "Tank (3): Kael, Brask, " in reply["data"]["content"]
+    assert (
+        "Tank (3): Kael (Crusader), Brask (Guardian), Kael"
+        in (_post_edits(roles)[-1]["content"])
+    )
 
 
 @pytest.mark.anyio

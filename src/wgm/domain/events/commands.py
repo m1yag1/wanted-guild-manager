@@ -18,6 +18,8 @@ from wgm.domain.discord.options import (
 )
 from wgm.domain.discord.permissions import ADMIN_ROLE
 from wgm.domain.discord.schemas import InteractionResponse
+from wgm.domain.events.classes import WEAPONS
+from wgm.domain.events.posts import update_post
 from wgm.domain.events.roster import (
     BUTTON_LABELS,
     CHOICES,
@@ -209,6 +211,19 @@ async def suggest_any_events(
     return await _suggest(ctx, typed, cancelled=True)
 
 
+async def suggest_event_or_class(
+    ctx: CommandContext, option: str, typed: str
+) -> list[tuple[str, str]]:
+    """Events for the event option; classes, with their weapons, for class."""
+    if option != "class":
+        return await suggest_events(ctx, option, typed)
+    return [
+        (f"{name} · {weapons}", name)
+        for name, weapons in WEAPONS.items()
+        if typed.strip().lower() in name.lower()
+    ]
+
+
 async def _suggest(
     ctx: CommandContext, typed: str, *, cancelled: bool
 ) -> list[tuple[str, str]]:
@@ -241,25 +256,6 @@ async def _upcoming(ctx: CommandContext, values: dict[str, Any]) -> Event | None
 NOT_FOUND = "Pick an upcoming event from the list as you type."
 
 
-async def _redraw(ctx: CommandContext, event: Event) -> str:
-    """Update the event's post; say so if the post couldn't be changed."""
-    if is_closed(event, ctx.now) and not event.cancelled_at:
-        event.closed_post_at = event.closed_post_at or ctx.now
-    try:
-        await ctx.discord.edit_message(
-            event.channel_id or "",
-            event.message_id or "",
-            event_post(event, ctx.now),
-            buttons(event, ctx.now),
-        )
-    except DiscordApiError:
-        return (
-            f"\nI couldn't update the post in <#{event.channel_id}>. It may have "
-            "been deleted."
-        )
-    return ""
-
-
 async def _edit(ctx: CommandContext, values: dict[str, Any]) -> InteractionResponse:
     event = await _upcoming(ctx, values)
     if event is None:
@@ -286,7 +282,7 @@ async def _edit(ctx: CommandContext, values: dict[str, Any]) -> InteractionRespo
         event.title = str(changes["title"]).strip()
     if "type" in changes:
         event.event_type = str(changes["type"])
-    problem = await _redraw(ctx, event)
+    problem = await update_post(ctx, event)
     await events(ctx).update(event)
     return private_reply(
         f"Updated **{event.title}**: {', '.join(changes)}.\n"
@@ -306,7 +302,7 @@ async def _cancel(ctx: CommandContext, values: dict[str, Any]) -> InteractionRes
     if event is None:
         return private_reply(NOT_FOUND)
     event.cancelled_at = ctx.now
-    problem = await _redraw(ctx, event)
+    problem = await update_post(ctx, event)
     await events(ctx).update(event)
     return private_reply(
         f"Cancelled **{event.title}**. The post now says so and has no buttons."
@@ -347,13 +343,19 @@ async def _add(ctx: CommandContext, values: dict[str, Any]) -> InteractionRespon
     user_id, choice_id = str(values["member"]), str(values["answer"])
     name = data.resolved.name(user_id)
     status, role = CHOICES[choice_id]
-    answer = Answer(user_id, name, status, role, by=ctx.user_id)
+    class_name = str(values.get("class", "")).strip().title() or None
+    if class_name and (role is None or class_name not in WEAPONS):
+        return private_reply(
+            "Pick a class from the list, and only with Tank, Healer or DPS."
+        )
+    answer = Answer(user_id, name, status, role, by=ctx.user_id, class_name=class_name)
     event = await events(ctx).set_answer(event, answer, ctx.now)
-    problem = await _redraw(ctx, event)
+    problem = await update_post(ctx, event)
     await events(ctx).update(event)
-    late = " (late)" if is_closed(event, ctx.now) else ""
+    notes = [n for n in (class_name, "late" if is_closed(event, ctx.now) else "") if n]
+    note = f" ({', '.join(notes)})" if notes else ""
     return private_reply(
-        f"Put **{name}** down as {BUTTON_LABELS[choice_id]}{late} for "
+        f"Put **{name}** down as {BUTTON_LABELS[choice_id]}{note} for "
         f"**{event.title}**.{problem}"
     )
 
@@ -368,7 +370,7 @@ async def _remove(ctx: CommandContext, values: dict[str, Any]) -> InteractionRes
     if events(ctx).signup(event, user_id) is None:
         return private_reply(f"**{name}** isn't on the roster for **{event.title}**.")
     event = await events(ctx).remove_answer(event, user_id, ctx.user_id, ctx.now)
-    problem = await _redraw(ctx, event)
+    problem = await update_post(ctx, event)
     await events(ctx).update(event)
     return private_reply(
         f"Took **{name}** off the roster for **{event.title}**.{problem}"
@@ -449,8 +451,11 @@ SUBCOMMANDS = (
                 "Their answer",
                 choices=[{"name": v, "value": k} for k, v in BUTTON_LABELS.items()],
             ),
+            _optional(
+                text("class", "Their class, such as Crusader", autocomplete=True)
+            ),
         ],
-        suggest=suggest_events,
+        suggest=suggest_event_or_class,
     ),
     Subcommand(
         ("event", "remove"),

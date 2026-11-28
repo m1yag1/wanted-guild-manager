@@ -84,6 +84,8 @@ class Signup(UUIDAuditBase):
     )
     role: Mapped[str | None] = mapped_column(String(16), default=None)
     """Tank, Healer or DPS. Empty for members who are not attending."""
+    class_name: Mapped[str | None] = mapped_column(String(32), default=None)
+    """The class they're bringing, such as Crusader, once they confirm it."""
     reason: Mapped[str | None] = mapped_column(String(200), default=None)
     """Why they can't come, if they said. Only admins see it."""
     changed_by: Mapped[str | None] = mapped_column(String(32), default=None)
@@ -126,3 +128,15 @@ class SignupChange(UUIDAuditBase):
     """Discord user ID of the member or admin who made the change."""
     late: Mapped[bool] = mapped_column(default=False)
     """Made after sign-ups closed."""
+
+
+class MemberClass(UUIDAuditBase):
+    """The class a member last confirmed for a role, offered first next time."""
+
+    __tablename__ = "member_class"
+    __table_args__ = (UniqueConstraint("guild_id", "user_id", "role"),)
+
+    guild_id: Mapped[str] = mapped_column(String(32))
+    user_id: Mapped[str] = mapped_column(String(32))
+    role: Mapped[str] = mapped_column(String(16))
+    class_name: Mapped[str] = mapped_column(String(32))

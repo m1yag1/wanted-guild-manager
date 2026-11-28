@@ -14,6 +14,7 @@ from wgm.db.models import (
     DEFAULT_CLOSE_MINUTES,
     Event,
     GuildSettings,
+    MemberClass,
     Signup,
     SignupAction,
     SignupChange,
@@ -89,6 +90,8 @@ class Answer:
     by: str
     """The member themselves, or the admin who set it."""
     reason: str | None = None
+    class_name: str | None = None
+    """Set by an admin; members confirm theirs after answering."""
 
 
 @frozen
@@ -178,15 +181,73 @@ class EventService(SQLAlchemyAsyncRepositoryService[Event]):
             action = SignupAction.ADDED
             current = Signup(user_id=answer.user_id)
             event.signups.append(current)
+        if current.role != answer.role:
+            current.class_name = None
         current.character_name, current.status, current.role = (
             answer.name,
             answer.status,
             answer.role,
         )
+        if answer.class_name:
+            await self._use_class(event, current, answer.class_name)
         current.reason = answer.reason
         current.changed_by, current.late = answer.by, late
         self._log(event, current, action, answer.by, late)
         return await self.update(event)
+
+    async def set_class(self, event: Event, signup: Signup, class_name: str) -> Event:
+        """Record the class a signed-up member is bringing, and remember it."""
+        await self._use_class(event, signup, class_name)
+        return await self.update(event)
+
+    async def _use_class(self, event: Event, signup: Signup, class_name: str) -> None:
+        signup.class_name = class_name
+        role = signup.role or ""
+        session = self.repository.session
+        remembered = await session.scalar(
+            select(MemberClass).where(
+                MemberClass.guild_id == event.guild_id,
+                MemberClass.user_id == signup.user_id,
+                MemberClass.role == role,
+            )
+        )
+        if remembered is None:
+            session.add(
+                MemberClass(
+                    guild_id=event.guild_id,
+                    user_id=signup.user_id,
+                    role=role,
+                    class_name=class_name,
+                )
+            )
+        else:
+            remembered.class_name = class_name
+
+    async def last_class(self, guild_id: str, user_id: str, role: str) -> str | None:
+        """The class a member last confirmed for a role in this server."""
+        found: str | None = await self.repository.session.scalar(
+            select(MemberClass.class_name).where(
+                MemberClass.guild_id == guild_id,
+                MemberClass.user_id == user_id,
+                MemberClass.role == role,
+            )
+        )
+        return found
+
+    async def class_counts(self, guild_id: str, role: str) -> dict[str, int]:
+        """How often this server's members brought each class in a role."""
+        statement = (
+            select(Signup.class_name, func.count())
+            .join(Event)
+            .where(
+                Event.guild_id == guild_id,
+                Signup.role == role,
+                Signup.class_name.is_not(None),
+            )
+            .group_by(Signup.class_name)
+        )
+        rows = await self.repository.session.execute(statement)
+        return {str(name): int(count) for name, count in rows.all()}
 
     async def remove_answer(
         self, event: Event, user_id: str, by: str, now: datetime

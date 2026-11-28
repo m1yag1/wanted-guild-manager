@@ -4,6 +4,8 @@ from collections.abc import Mapping
 
 from wgm.domain.discord.context import ButtonHandler, CommandContext, Subcommand
 from wgm.domain.events.buttons import REASON, press, submit_reason
+from wgm.domain.events.class_picker import PREFIX as CLASS
+from wgm.domain.events.class_picker import pick_class
 from wgm.domain.events.closing import close_job
 from wgm.domain.events.commands import SUBCOMMANDS, setup_line
 from wgm.domain.events.seed import DEV_SUBCOMMANDS
@@ -39,8 +41,8 @@ class EventPlugin:
         return DEV_SUBCOMMANDS
 
     def buttons(self) -> Mapping[str, ButtonHandler]:
-        """The sign-up buttons, and the Not attending reason form."""
-        return {"signup": press, REASON: submit_reason}
+        """The sign-up buttons, the Not attending form, and the class dropdown."""
+        return {"signup": press, REASON: submit_reason, CLASS: pick_class}
 
     def jobs(self, config: PluginConfig) -> tuple[Job, ...]:
         """Lock posts as their sign-ups close."""
